@@ -134,8 +134,16 @@ export async function generateFlashcardData(
    - Antonyms: prefer relational/direct opposites of the intended meaning (e.g., for "go drinking" prefer "stay sober" / "abstain").`
 
   const conjugationsInstruction = includeConjugations
-    ? `6. If the part of speech is "verb", provide its conjugation in these 6 English tenses: Simple Present (3rd person singular), Simple Past, Present Continuous, Past Continuous, Present Perfect, and Past Perfect. Also, identify if it is "regular" or "irregular".`
-    : `6. If the part of speech is "verb", identify if it is "regular" or "irregular". Set "conjugations" to null.`
+    ? `6. VERB CONJUGATIONS & TYPE (CRITICAL STEP):
+   - If "partOfSpeech" is NOT "verb", you MUST set "verbType" to null and "conjugations" to null.
+   - If "partOfSpeech" IS "verb", provide its 6 English tenses.
+   - VERB TYPE VERIFICATION: You must accurately classify "verbType" as "regular" or "irregular". 
+     * Rule 1 (REGULAR): The Simple Past and Past Participle are formed STRICTLY by adding "-ed" or "-d" to the base form (e.g., work -> worked, bake -> baked).
+     * Rule 2 (IRREGULAR): Any other spelling change, completely different forms, or verbs that DO NOT CHANGE at all (e.g., run -> ran, buy -> bought, hit -> hit, cut -> cut) MUST be classified as "irregular".
+     * Double-check the Simple Past form in your head before assigning the "verbType" value.`
+    : `6. VERB TYPE (CRITICAL STEP):
+   - If "partOfSpeech" is NOT "verb", set "verbType" to null and "conjugations" to null.
+   - If "partOfSpeech" IS "verb", verify its type. RULE: It is "regular" ONLY if the Simple Past and Past Participle end in "-ed" or "-d". If it changes in any other way or does not change at all (like "put" -> "put"), it is "irregular". Set "conjugations" to null.`
 
   const usageNoteInstruction = includeUsageNote
     ? `3b. USAGE NOTE (optional): If the English word is noticeably formal/technical/idiomatic, add a short note in Brazilian Portuguese explaining the typical context and give 1-2 everyday alternatives when appropriate. If not needed, return "" in "usageNote".`
