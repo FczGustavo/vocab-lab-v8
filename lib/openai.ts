@@ -64,6 +64,8 @@ export interface FlashcardAIResponse {
     translation: string
     example: string
   }[]
+  _verbReasoning?: string
+  _falseCognateReasoning?: string
   verbType?: "regular" | "irregular" | null
   falseCognate: {
     isFalseCognate: boolean
@@ -134,16 +136,8 @@ export async function generateFlashcardData(
    - Antonyms: prefer relational/direct opposites of the intended meaning (e.g., for "go drinking" prefer "stay sober" / "abstain").`
 
   const conjugationsInstruction = includeConjugations
-    ? `6. VERB CONJUGATIONS & TYPE (CRITICAL STEP):
-   - If "partOfSpeech" is NOT "verb", you MUST set "verbType" to null and "conjugations" to null.
-   - If "partOfSpeech" IS "verb", provide its 6 English tenses.
-   - VERB TYPE VERIFICATION: You must accurately classify "verbType" as "regular" or "irregular". 
-     * Rule 1 (REGULAR): The Simple Past and Past Participle are formed STRICTLY by adding "-ed" or "-d" to the base form (e.g., work -> worked, bake -> baked).
-     * Rule 2 (IRREGULAR): Any other spelling change, completely different forms, or verbs that DO NOT CHANGE at all (e.g., run -> ran, buy -> bought, hit -> hit, cut -> cut) MUST be classified as "irregular".
-     * Double-check the Simple Past form in your head before assigning the "verbType" value.`
-    : `6. VERB TYPE (CRITICAL STEP):
-   - If "partOfSpeech" is NOT "verb", set "verbType" to null and "conjugations" to null.
-   - If "partOfSpeech" IS "verb", verify its type. RULE: It is "regular" ONLY if the Simple Past and Past Participle end in "-ed" or "-d". If it changes in any other way or does not change at all (like "put" -> "put"), it is "irregular". Set "conjugations" to null.`
+    ? `6. CONJUGATIONS: If "partOfSpeech" is "verb", provide its 6 English tenses. If NOT a verb, set "conjugations" to null.`
+    : `6. CONJUGATIONS: Set "conjugations" to null.`
 
   const usageNoteInstruction = includeUsageNote
     ? `3b. USAGE NOTE (optional): If the English word is noticeably formal/technical/idiomatic, add a short note in Brazilian Portuguese explaining the typical context and give 1-2 everyday alternatives when appropriate. If not needed, return "" in "usageNote".`
@@ -194,11 +188,9 @@ ${synonymsInstruction}
 5. An natural example sentence in American English.
 ${conjugationsInstruction}
 7. FALSE COGNATE DETECTION (ULTRA-STRICT): 
-   - You must check EVERY word (noun, verb, adverb, adjective, etc.) to see if it is a false cognate (falso amigo) for Portuguese speakers.
+   - You must check EVERY word to see if it is a false cognate (falso amigo) for Portuguese speakers IN THAT SPECIFIC PART OF SPEECH.
    - A word is a false cognate if its spelling or sound resembles a Portuguese word, but its meaning in American English is different.
-   - EXAMPLES TO DETECT: "Actually" (looks like atualmente), "Parents" (looks like parentes), "Library" (looks like livraria), "Push" (looks like puxe), "Novel" (looks like novela), "Fabric" (looks like fábrica), "Attend" (looks like atender), "Pretend" (looks like pretender), "Notice" (looks like notícia), etc.
-   - If it IS a false cognate, set "isFalseCognate" to true and provide a mandatory warning following this pattern: "Word: Significado Correto (não é 'Palavra Errada' - que seria 'Tradução da Errada')".
-   - If NOT a false cognate, set "isFalseCognate" to false and "warning" to "".
+   - EXAMPLES TO DETECT: "Actually", "Parents", "Library", "Push", "Novel", "Fabric", "Attend", "Pretend", "Notice", "Record" (verb only), etc.
 ${alternativeFormsInstruction}
 
 Return a JSON with this exact structure:
@@ -211,7 +203,9 @@ Return a JSON with this exact structure:
   "antonyms": [{"word": "antonym1", "type": "literal" | "figurative" | "slang"}],
   "example": "Example sentence.",
   "alternativeForms": [{"word": "elevation", "partOfSpeech": "noun", "translation": "elevação", "example": "The elevation is 2,000 meters."}],
+  "_verbReasoning": "Template: 'Past is [word]. Ends in -ed/-d? [Yes/No]. Type: [regular/irregular]'",
   "verbType": "regular" | "irregular" | null,
+  "_falseCognateReasoning": "Looks like PT word? [Yes/No]. Which? [word]. Does THIS specific part of speech have a different meaning? [Yes/No]",
   "falseCognate": {
     "isFalseCognate": boolean,
     "warning": "Warning message"
@@ -226,8 +220,14 @@ Return a JSON with this exact structure:
   }
 }
 
-If a tense doesn't apply or exist for the word, use "n/a".
-If the word is not a verb, return "conjugations" as null.`,
+CRITICAL RULES FOR JSON:
+1. VERBS (verbType):
+   - If "partOfSpeech" is NOT a verb: set "_verbReasoning" to "n/a" and "verbType" to null.
+   - If it IS a verb, fill "_verbReasoning" first. If Yes (-ed/-d), you MUST set "verbType": "regular". If No (like cut, put, bought), you MUST set "verbType": "irregular".
+2. FALSE COGNATES:
+   - Fill "_falseCognateReasoning" first. Think: Does this English word resemble a Portuguese word BUT means something completely different in THIS specific part of speech?
+   - If Yes (e.g., "Push" looks like "Puxe" but means "Empurrar"), set "isFalseCognate": true and create a specific warning. Example: "Push: Empurrar (não é 'puxar' - que seria 'pull')".
+   - If No (it doesn't look like a PT word, OR it is a True Cognate in this part of speech, like "Music" = "Música"), set "isFalseCognate": false and "warning": "".`,
     },
     {
       role: "user",
@@ -308,7 +308,7 @@ Synonyms/antonyms instruction: ${synonymsInstruction}
 Usage note instruction: ${usageNoteInstruction}
 Alternative forms instruction: ${alternativeFormsInstruction}
 
-Also re-check false cognate status for Portuguese speakers and return "falseCognate" accordingly.
+Also re-check false cognate status for Portuguese speakers IN THIS SPECIFIC PART OF SPEECH and return "falseCognate" accordingly.
 
 Return JSON with this exact structure:
 {
