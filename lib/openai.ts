@@ -135,7 +135,7 @@ export async function generateFlashcardData(
     ? `6. CONJUGAÇÕES (Em Inglês Americano): Se "partOfSpeech" for "verb", forneça os 6 tempos verbais. Se NÃO for um verbo, defina "conjugations" como null.`
     : `6. CONJUGAÇÕES: Defina "conjugations" como null.`
 
- const usageNoteInstruction = includeUsageNote
+  const usageNoteInstruction = includeUsageNote
     ? `3b. NOTA DE USO (opcional): Seja EXTREMAMENTE DIDÁTICO, porém PRECISO e DIRETO AO PONTO (estilo flashcard, máximo absoluto de 2 frases curtas). 
    - Explique a essência do uso, nuance ou contexto em PORTUGUÊS BRASILEIRO.
    - PROIBIDO usar introduções longas (ex: não escreva "Esta palavra costuma indicar...", vá direto para "Indica...").
@@ -154,8 +154,8 @@ Não repita a classe gramatical principal.`
     : `7. FORMAS ALTERNATIVAS: NÃO gere formas alternativas. Sempre retorne "alternativeForms": [].`
 
   const efommInstruction = efommMode
-    ? `MODO EFOMM (MARÍTIMO): Dê preferência a significados e frases de exemplo do contexto marítimo/naval/portuário/logístico sempre que a palavra tiver um sentido aplicável e comum nesse nicho no Inglês Americano. Se a palavra não tiver relação com o contexto marítimo, mantenha o significado geral e um exemplo normal. NÃO force o contexto marítimo onde ficar antinatural.
-Se o modo EFOMM alterar o significado em comparação com o uso diário, você pode esclarecer isso brevemente em "usageNote". Caso contrário, não mencione o contexto marítimo explicitamente.`
+    ? `MODO EFOMM (MARÍTIMO): Priorize significados e frases de exemplo do contexto marítimo/naval/portuário/logístico no Inglês Americano, se aplicável e natural. NÃO force se ficar antinatural.
+Se alterar o significado em comparação com o uso diário, aplique a mesma regra de essência na "usageNote": seja ULTRA CONCISO (máx 1 a 2 frases diretas, sem enrolação). Não mencione o contexto marítimo explicitamente se não alterar o sentido.`
     : ``
 
   const messages: OpenRouterMessage[] = [
@@ -250,16 +250,19 @@ export async function reviseFlashcardByTranslation(
       ? `NÃO gere sinônimos ou antônimos. Retorne "synonyms": [] e "antonyms": [].`
       : `Forneça até ${synonymsLevel} sinônimos e até ${synonymsLevel} antônimos em INGLÊS que correspondam ao sentido EXATO implícito pela tradução.`
 
-  const usageNoteInstruction = includeUsageNote
-    ? `Se necessário, forneça uma curta "usageNote" em PORTUGUÊS BRASILEIRO. Se não for necessário, retorne "".`
-    : `Sempre retorne "usageNote": "".`
-
   const alternativeFormsInstruction = includeAlternativeForms
     ? `Se relevante, inclua até 2 formas alternativas com a palavra "word" correta em inglês, sua classe gramatical, tradução para o português (use artigo para substantivos) e uma frase de exemplo em inglês. Evite meta-definições como "o ato de...".`
     : `Sempre retorne "alternativeForms": [].`
 
+  const usageNoteInstruction = includeUsageNote
+    ? `NOTA DE USO (opcional): Seja EXTREMAMENTE DIDÁTICO, porém PRECISO e DIRETO AO PONTO (estilo flashcard, máximo absoluto de 2 frases curtas). 
+   - Explique a essência do uso, nuance ou contexto em PORTUGUÊS BRASILEIRO.
+   - PROIBIDO usar introduções longas. Vá direto para a regra prática.
+   - Se a palavra não tiver nenhuma nuance especial de uso, retorne "".`
+    : `NOTA DE USO: NÃO gere notas de uso. Sempre retorne "usageNote": "".`
+
   const efommInstruction = efommMode
-    ? `MODO EFOMM (MARÍTIMO): Dê preferência a contextos navais e marítimos se for plausível. Se alterar o sentido em relação ao uso diário, esclareça na "usageNote".`
+    ? `MODO EFOMM (MARÍTIMO): Dê preferência a contextos navais e marítimos se for plausível. Se alterar o significado diário, aplique a mesma regra de essência na "usageNote": seja ULTRA CONCISO (máx 1 a 2 frases).`
     : ``
 
   const messages: OpenRouterMessage[] = [
