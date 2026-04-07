@@ -1,13 +1,13 @@
 import type { Flashcard, GrammarExercise } from "./types"
 
-const OPENAI_API_URL = "https://api.openai.com/v1/chat/completions"
+const OPENROUTER_API_URL = "https://openrouter.ai/api/v1/chat/completions"
 
-interface OpenAIMessage {
+interface OpenRouterMessage {
   role: "system" | "user" | "assistant"
   content: string
 }
 
-interface OpenAIResponse {
+interface OpenRouterResponse {
   choices: {
     message: {
       content: string
@@ -15,17 +15,19 @@ interface OpenAIResponse {
   }[]
 }
 
-async function callOpenAI<T>(
+async function callOpenRouter<T>(
   apiKey: string,
-  messages: OpenAIMessage[],
-  model: string = "gpt-4o-mini",
+  messages: OpenRouterMessage[],
+  model: string = "openai/gpt-4o-mini",
   responseFormat?: { type: "json_object" }
 ): Promise<T> {
-  const response = await fetch(OPENAI_API_URL, {
+  const response = await fetch(OPENROUTER_API_URL, {
     method: "POST",
     headers: {
       "Content-Type": "application/json",
       Authorization: `Bearer ${apiKey}`,
+      "HTTP-Referer": process.env.NEXT_PUBLIC_SITE_URL || "http://localhost:3000",
+      "X-OpenRouter-Title": "Meu App de Flashcards",
     },
     body: JSON.stringify({
       model,
@@ -37,10 +39,10 @@ async function callOpenAI<T>(
 
   if (!response.ok) {
     const error = await response.json()
-    throw new Error(error.error?.message || "Erro na chamada da API")
+    throw new Error(error.error?.message || "Erro na chamada da API do OpenRouter")
   }
 
-  const data: OpenAIResponse = await response.json()
+  const data: OpenRouterResponse = await response.json()
   const content = data.choices[0].message.content
 
   if (!content) {
@@ -65,12 +67,7 @@ export interface FlashcardAIResponse {
     example: string
   }[]
   _verbReasoning?: string
-  _falseCognateReasoning?: string
   verbType?: "regular" | "irregular" | null
-  falseCognate: {
-    isFalseCognate: boolean
-    warning: string
-  }
   conjugations?: {
     simplePresent: string
     simplePast: string
@@ -102,16 +99,12 @@ export interface FlashcardRevisionResponse {
     translation: string
     example: string
   }[]
-  falseCognate: {
-    isFalseCognate: boolean
-    warning: string
-  }
 }
 
 export async function generateFlashcardData(
   apiKey: string,
   word: string,
-  model: string = "gpt-4o-mini",
+  model: string = "openai/gpt-4o-mini",
   options?: GenerateFlashcardOptions
 ): Promise<FlashcardAIResponse> {
   const synonymsLevel = Math.max(0, Math.min(3, options?.synonymsLevel ?? 2))
@@ -121,7 +114,7 @@ export async function generateFlashcardData(
   const efommMode = options?.efommMode ?? false
   const targetPartOfSpeech = options?.targetPartOfSpeech
 
-  console.log(`[OpenAI] Calling ${model} for word: ${word}`)
+  console.log(`[OpenRouter] Calling ${model} for word: ${word}`)
 
   const synonymsInstruction =
     synonymsLevel === 0
@@ -144,15 +137,14 @@ export async function generateFlashcardData(
     : `3b. USAGE NOTE: Do NOT generate usage notes. Always return "usageNote": "" .`
 
   const alternativeFormsInstruction = includeAlternativeForms
-    ? `8. ALTERNATIVE FORMS: If the word is commonly used as another part of speech in American English (e.g., noun and verb), include up to 2 alternative forms, ONLY when the meaning is commonly used and significantly different from the primary meaning (not just a grammatical rephrase).
+    ? `7. ALTERNATIVE FORMS: If the word is commonly used as another part of speech in American English (e.g., noun and verb), include up to 2 alternative forms, ONLY when the meaning is commonly used and significantly different from the primary meaning (not just a grammatical rephrase).
 IMPORTANT:
    - For each alternative form, provide the correct English word/form in "word" (e.g., "elevation" for the noun, "elevated" for the adjective).
    - Provide a concise Portuguese translation (include the article if it is a noun, e.g., "a elevação").
    - Avoid meta-definitions like "o ato de..." for alternative noun forms. If the best you can do is an "act of ..." explanation, then DO NOT include that alternative form.
    - Provide an example sentence using that exact English form.
-   - REAVALIE the false cognate status for each alternative form independently.
 Do not repeat the primary part of speech.`
-    : `8. ALTERNATIVE FORMS: Do NOT generate alternative forms. Always return "alternativeForms": [].`
+    : `7. ALTERNATIVE FORMS: Do NOT generate alternative forms. Always return "alternativeForms": [].`
 
   const efommInstruction = efommMode
     ? `EFOMM MODE (MARITIME): Prefer maritime/naval/port/shipping/logistics meanings and example sentences whenever the word has a plausible and commonly used maritime sense in American English. If the word is not meaningfully related to maritime contexts, keep the general meaning and a normal example. Do NOT force maritime context when it would be unnatural.
@@ -160,7 +152,7 @@ Do not repeat the primary part of speech.`
 If EFOMM mode changes the meaning compared to everyday/general usage, you may briefly clarify it in "usageNote". Otherwise, do not mention maritime context explicitly.`
     : ``
 
-  const messages: OpenAIMessage[] = [
+  const messages: OpenRouterMessage[] = [
     {
       role: "system",
       content: `You are a senior American English teacher specializing in teaching Brazilian Portuguese speakers. 
@@ -188,11 +180,6 @@ ${usageNoteInstruction}
 ${synonymsInstruction}
 5. An natural example sentence in American English.
 ${conjugationsInstruction}
-7. FALSE COGNATE DETECTION: 
-   - Check if the word is a false cognate (falso amigo) for Portuguese speakers IN THIS SPECIFIC PART OF SPEECH.
-   - A word is a false cognate ONLY IF its spelling/sound resembles a Portuguese word, BUT its actual translation is completely different.
-   - CAUTION WITH POLYSEMY (MULTIPLE MEANINGS): If the English word looks like a PT word, and it CAN actually mean that PT word in some contexts (e.g., "record" CAN mean "recorde", even if its primary meaning is "registro"), then it is NOT a false cognate. Do not trigger the warning.
-   - CAUTION WITH DUAL WORDS: For example, "Prejudice" (noun) means "preconceito" (looks like "prejuízo", so it IS a false cognate). BUT "Prejudice" (verb) translates to "prejudicar" (it looks like "prejudicar" and means "prejudicar", so it is a TRUE COGNATE, not false).
 ${alternativeFormsInstruction}
 
 Return a JSON with this exact structure:
@@ -207,11 +194,6 @@ Return a JSON with this exact structure:
   "alternativeForms": [{"word": "elevation", "partOfSpeech": "noun", "translation": "elevação", "example": "The elevation is 2,000 meters."}],
   "_verbReasoning": "Template: 'Past is [word]. Ends in -ed/-d? [Yes/No]. Type: [regular/irregular]'",
   "verbType": "regular" | "irregular" | null,
-  "_falseCognateReasoning": "Template: 'Translation is [word]. Looks like PT word [word]. Do they match? [Yes/No]. False Cognate? [Yes/No]'",
-  "falseCognate": {
-    "isFalseCognate": boolean,
-    "warning": "Warning message"
-  },
   "conjugations": {
     "simplePresent": "runs",
     "simplePast": "ran",
@@ -223,16 +205,9 @@ Return a JSON with this exact structure:
 }
 
 CRITICAL RULES FOR JSON:
-1. VERBS (verbType):
+VERBS (verbType):
    - If "partOfSpeech" is NOT a verb: set "_verbReasoning" to "n/a" and "verbType" to null.
-   - If it IS a verb, fill "_verbReasoning" first. If Yes (-ed/-d), you MUST set "verbType": "regular". If No (like cut, put, bought), you MUST set "verbType": "irregular".
-2. FALSE COGNATES:
-   - Fill "_falseCognateReasoning" first. Compare the ACTUAL translation generated in step 3 with the Portuguese word it resembles.
-   - SANITY CHECK: If the English word actually IS the correct translation for the Portuguese word it resembles (e.g., "record" is indeed the translation for "recorde"), then your analysis is wrong. Set "isFalseCognate": false and "warning": "".
-   - If the English word looks like a PT word but the translation is completely different (e.g., "Push" translates to "empurrar", but looks like "puxar"), set "isFalseCognate": true.
-   - IMPORTANT WARNING TEMPLATE: If "isFalseCognate" is true, the "warning" string MUST STRICTLY follow this exact template: 
-     "Cuidado: '[Palavra em Inglês]' não significa '[Tradução Falsa em Português]'; significa '[Tradução Correta em Português]'. Para dizer '[Tradução Falsa em Português]' em inglês, use '[Palavra Correta em Inglês]'."
-   - If the English word looks like a PT word AND translates to it, it is a TRUE COGNATE. Set "isFalseCognate": false and "warning": "".`,
+   - If it IS a verb, fill "_verbReasoning" first. If Yes (-ed/-d), you MUST set "verbType": "regular". If No (like cut, put, bought), you MUST set "verbType": "irregular".`,
     },
     {
       role: "user",
@@ -242,7 +217,7 @@ CRITICAL RULES FOR JSON:
     },
   ]
 
-  return callOpenAI<FlashcardAIResponse>(apiKey, messages, model, {
+  return callOpenRouter<FlashcardAIResponse>(apiKey, messages, model, {
     type: "json_object",
   })
 }
@@ -258,7 +233,7 @@ export async function reviseFlashcardByTranslation(
     includeAlternativeForms?: boolean
     includeUsageNote?: boolean
   },
-  model: string = "gpt-4o-mini"
+  model: string = "openai/gpt-4o-mini"
 ): Promise<FlashcardRevisionResponse> {
   const synonymsLevel = Math.max(0, Math.min(3, input.synonymsLevel ?? 2))
   const includeAlternativeForms = input.includeAlternativeForms ?? true
@@ -282,7 +257,7 @@ export async function reviseFlashcardByTranslation(
     ? `EFOMM MODE (MARITIME): Prefer maritime/naval/port/shipping/logistics meanings and examples whenever plausible. If it changes the meaning vs everyday usage, briefly clarify it in "usageNote". Otherwise, do not mention maritime context explicitly.`
     : ``
 
-  const messages: OpenAIMessage[] = [
+  const messages: OpenRouterMessage[] = [
     {
       role: "system",
       content: `You are a senior American English teacher specializing in teaching Brazilian Portuguese speakers.
@@ -313,11 +288,6 @@ Synonyms/antonyms instruction: ${synonymsInstruction}
 Usage note instruction: ${usageNoteInstruction}
 Alternative forms instruction: ${alternativeFormsInstruction}
 
-Also re-check false cognate status for Portuguese speakers IN THIS SPECIFIC PART OF SPEECH and return "falseCognate" accordingly.
-SANITY CHECK: If the English word actually IS the correct translation for the Portuguese word it resembles (e.g., "record" is indeed the translation for "recorde"), do NOT mark it as a false cognate. Set "isFalseCognate": false and "warning": "".
-IMPORTANT: If "isFalseCognate" is true, the "warning" MUST strictly follow this exact template: 
-"Cuidado: '[Palavra em Inglês]' não significa '[Tradução Falsa em Português]'; significa '[Tradução Correta em Português]'. Para dizer '[Tradução Falsa em Português]' em inglês, use '[Palavra Correta em Inglês]'."
-
 Return JSON with this exact structure:
 {
   "translation": "Portuguese translation",
@@ -325,8 +295,7 @@ Return JSON with this exact structure:
   "synonyms": [{"word": "x", "type": "literal" | "figurative" | "slang"}],
   "antonyms": [{"word": "y", "type": "literal" | "figurative" | "slang"}],
   "example": "American English example sentence matching this sense",
-  "alternativeForms": [{"word": "form", "partOfSpeech": "noun", "translation": "a ...", "example": "..." }],
-  "falseCognate": {"isFalseCognate": boolean, "warning": "string"}
+  "alternativeForms": [{"word": "form", "partOfSpeech": "noun", "translation": "a ...", "example": "..." }]
 }`,
     },
     {
@@ -339,14 +308,14 @@ Return JSON with this exact structure:
     },
   ]
 
-  return callOpenAI<FlashcardRevisionResponse>(apiKey, messages, model, { type: "json_object" })
+  return callOpenRouter<FlashcardRevisionResponse>(apiKey, messages, model, { type: "json_object" })
 }
 
 export async function generateGrammarExercises(
   apiKey: string,
   flashcards: Flashcard[],
   exerciseType: "fill-blank" | "verb-conjugation" | "mixed",
-  model: string = "gpt-4o-mini",
+  model: string = "openai/gpt-4o-mini",
   count: number = 5
 ): Promise<GrammarExercise[]> {
   const words = flashcards.map((f) => f.word).join(", ")
@@ -358,7 +327,7 @@ export async function generateGrammarExercises(
         ? "Create verb conjugation exercises where the student must conjugate the verb correctly (past tense, present continuous, etc.)."
         : "Create a mix of fill-in-the-blank and verb conjugation exercises."
 
-  const messages: OpenAIMessage[] = [
+  const messages: OpenRouterMessage[] = [
     {
       role: "system",
       content: `You are an English grammar teacher creating exercises for Brazilian Portuguese speakers. ${typeInstructions}
@@ -387,7 +356,7 @@ Create ${count} exercises. Make sentences natural and educational.`,
     },
   ]
 
-  const response = await callOpenAI<{ exercises: GrammarExercise[] }>(
+  const response = await callOpenRouter<{ exercises: GrammarExercise[] }>(
     apiKey,
     messages,
     model,
