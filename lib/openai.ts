@@ -18,7 +18,7 @@ interface OpenRouterResponse {
 async function callOpenRouter<T>(
   apiKey: string,
   messages: OpenRouterMessage[],
-  model: string = "openai/gpt-5.4-mini",
+  model: string = "openai/gpt-5.4-nano",
   responseFormat?: { type: "json_object" }
 ): Promise<T> {
   const response = await fetch(OPENROUTER_API_URL, {
