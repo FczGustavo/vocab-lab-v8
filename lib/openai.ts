@@ -104,7 +104,7 @@ export interface FlashcardRevisionResponse {
 export async function generateFlashcardData(
   apiKey: string,
   word: string,
-  model: string = "openai/gpt-4o-mini",
+  model: string = "openai/gpt-5.4-mini",
   options?: GenerateFlashcardOptions
 ): Promise<FlashcardAIResponse> {
   const synonymsLevel = Math.max(0, Math.min(3, options?.synonymsLevel ?? 2))
