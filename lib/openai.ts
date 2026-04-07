@@ -135,8 +135,12 @@ export async function generateFlashcardData(
     ? `6. CONJUGAÇÕES (Em Inglês Americano): Se "partOfSpeech" for "verb", forneça os 6 tempos verbais. Se NÃO for um verbo, defina "conjugations" como null.`
     : `6. CONJUGAÇÕES: Defina "conjugations" como null.`
 
-  const usageNoteInstruction = includeUsageNote
-    ? `3b. NOTA DE USO (opcional): Se a palavra em inglês for visivelmente formal, técnica ou idiomática, adicione uma nota curta EM PORTUGUÊS BRASILEIRO explicando o contexto típico e dê 1-2 alternativas do dia a dia quando apropriado. Se não for necessário, retorne "" em "usageNote".`
+ const usageNoteInstruction = includeUsageNote
+    ? `3b. NOTA DE USO (opcional): Seja EXTREMAMENTE DIDÁTICO, porém PRECISO e DIRETO AO PONTO (estilo flashcard, máximo absoluto de 2 frases curtas). 
+   - Explique a essência do uso, nuance ou contexto em PORTUGUÊS BRASILEIRO.
+   - PROIBIDO usar introduções longas (ex: não escreva "Esta palavra costuma indicar...", vá direto para "Indica...").
+   - Foque na regra prática. Exemplo bom: "Indica passagem física (go through) ou duração contínua (through the night). Comum com verbos de envio."
+   - Se a palavra não tiver nenhuma nuance especial de uso, retorne "".`
     : `3b. NOTA DE USO: NÃO gere notas de uso. Sempre retorne "usageNote": "".`
 
   const alternativeFormsInstruction = includeAlternativeForms
