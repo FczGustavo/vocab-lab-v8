@@ -145,6 +145,7 @@ export async function generateFlashcardData(
    - SE A PALAVRA FOR UMA SIGLA (ex: CWQ), OBRIGATORIAMENTE escreva o que as letras significam em inglês.
    - Explique a essência do uso, nuance ou conceito técnico em PORTUGUÊS BRASILEIRO.
    - PROIBIDO usar introduções longas. Vá direto para a regra prática ou definição conceitual.
+   - PROIBIDO dar "bronca" ou mencionar correções ortográficas/hífens errados que você ajustou no passo 1. Aja como se a palavra tivesse sido digitada perfeitamente.
    - Se a palavra não tiver nenhuma nuance especial e não for sigla, retorne "".`
     : `3b. NOTA DE USO: NÃO gere notas de uso. Sempre retorne "usageNote": "".`
 
@@ -179,9 +180,9 @@ Quando receber uma palavra em inglês, siga estes passos para gerar dados de est
    - um SUBSTANTIVO VERBAL (noun) nomeando um objeto, sistema, atividade estabelecida ou processo fixo (ex: "mooring", "rigging", "wiring"), ou
    - um GERÚNDIO / PARTICÍPIO PRESENTE (verb) expressando uma ação em andamento.
    Prefira "noun" quando a forma -ing comumente nomeia um objeto/sistema, especialmente no uso técnico.
-1. NORMALIZAÇÃO (CORREÇÃO DE ERROS E HÍFEN):
-   - ERRO DE HÍFEN EM VERBOS/EXPRESSÕES: Se o usuário enviou verbos compostos, modais ou phrasal verbs com hífen indevido (ex: "look-forward-to", "rely-on", "should-have", "carry-out"), CORRIJA substituindo o hífen por um ESPAÇO em "normalizedWord" (ex: "look forward to", "rely on"). PROIBIDO juntar as palavras.
-   - ERRO DE INFINITIVO: Se o usuário enviar "to-steer" ou "to steer", remova o "to" e normalize apenas para "steer".
+1. NORMALIZAÇÃO (CORREÇÃO DE ERROS E HÍFEN - SILENCIOSA):
+   - ERRO DE HÍFEN EM VERBOS/EXPRESSÕES: Se o usuário enviou verbos compostos, modais ou phrasal verbs com hífen indevido (ex: "look-forward-to", "rely-on", "should-have", "carry-out"), CORRIJA SILENCIOSAMENTE substituindo o hífen por um ESPAÇO em "normalizedWord" (ex: "look forward to", "rely on"). PROIBIDO juntar as palavras. NÃO comente sobre esse erro na Nota de Uso.
+   - ERRO DE INFINITIVO: Se o usuário enviar "to-steer" ou "to steer", remova o "to" silenciosamente e normalize apenas para "steer".
    - HÍFEN CORRETO: Substantivos ou adjetivos que exigem hífen (ex: "make-up", "might-be") mantêm o hífen.
    - Siglas e termos compostos corretos (ex: "challenging water quality"): mantenha a forma original.
 2. CLASSE GRAMATICAL ("partOfSpeech"): Classifique OBRIGATORIAMENTE a palavra usando APENAS as classes do JSON. 
