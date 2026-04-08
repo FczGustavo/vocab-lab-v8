@@ -63,6 +63,7 @@ export interface FlashcardAIResponse {
   synonyms: { word: string; type: "literal" | "figurative" | "slang" | "abstract" }[]
   antonyms: { word: string; type: "literal" | "figurative" | "slang" | "abstract" }[]
   example: string
+  exampleTranslation?: string
   alternativeForms: {
     word: string
     partOfSpeech: string
@@ -96,6 +97,7 @@ export interface FlashcardRevisionResponse {
   synonyms: { word: string; type: "literal" | "figurative" | "slang" | "abstract" }[]
   antonyms: { word: string; type: "literal" | "figurative" | "slang" | "abstract" }[]
   example: string
+  exampleTranslation?: string
   alternativeForms: {
     word: string
     partOfSpeech: string
@@ -198,6 +200,7 @@ Retorne um JSON com esta estrutura exata (MANTENHA AS CHAVES DO JSON EM INGLÊS)
   "synonyms": [{"word": "synonym1", "type": "literal" | "figurative" | "slang"}],
   "antonyms": [{"word": "antonym1", "type": "literal" | "figurative" | "slang"}],
   "example": "Frase de exemplo em inglês.",
+  "exampleTranslation": "Tradução natural da frase acima em Português Brasileiro.",
   "alternativeForms": [{"word": "elevation", "partOfSpeech": "noun", "translation": "a elevação", "example": "The elevation is 2,000 meters."}],
   "_verbReasoning": "Template: 'Passado é [palavra]. Termina em -ed/-d? [Yes/No]. Tipo: [regular/irregular]'",
   "verbType": "regular" | "irregular" | null,
@@ -280,19 +283,10 @@ Sua base de conhecimento é estritamente INGLÊS AMERICANO.
 ${efommInstruction}
 
 Você receberá:
-- uma palavra em inglês
-- uma classe gramatical fixa
-- uma NOVA tradução em português escolhida pelo usuário
 
 Sua tarefa:
-- Mantenha a mesma palavra em inglês e a mesma classe gramatical.
-- Atualize todos os outros campos para ficarem consistentes com essa NOVA tradução/sentido.
 
 Regras:
-- "translation" DEVE ser retornada exatamente como fornecida pelo usuário.
-- Para substantivos (nouns), caso você gere outras formas alternativas, use artigos em português ("a proa", "o porto").
-- Sinônimos/antônimos (em inglês) DEVEM incluir um tipo: "literal" | "figurative" | "slang".
-- Fidelidade: Liste apenas sinônimos e exemplos que se encaixem perfeitamente nesse novo sentido.
 
 Instrução de sinônimos/antônimos: ${synonymsInstruction}
 Instrução de nota de uso: ${usageNoteInstruction}

@@ -27,6 +27,7 @@ export interface Flashcard {
   synonyms: ClassifiedWord[]
   antonyms: ClassifiedWord[]
   example: string
+  exampleTranslation?: string
   alternativeForms: AlternativeForm[]
   conjugations?: {
     simplePresent: string
@@ -53,6 +54,7 @@ export interface FlashcardAIResponse {
   synonyms: ClassifiedWord[]
   antonyms: ClassifiedWord[]
   example: string
+  exampleTranslation?: string
   alternativeForms: AlternativeForm[]
   verbType?: "regular" | "irregular"
   falseCognate?: {

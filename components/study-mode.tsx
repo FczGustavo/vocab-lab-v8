@@ -1,7 +1,7 @@
 "use client"
 
 import { useState, useCallback, useEffect } from "react"
-import { X, RotateCcw, CheckCircle2, XCircle, Volume2, ChevronRight, Trophy, RotateCw, AlertTriangle } from "lucide-react"
+import { X, RotateCcw, CheckCircle2, XCircle, Volume2, ChevronRight, Trophy, RotateCw, AlertTriangle, Languages } from "lucide-react"
 import { cn } from "@/lib/utils"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
@@ -83,6 +83,7 @@ export function StudyMode({ flashcards, folderName, onExit }: StudyModeProps) {
   const [correctFirstTryIds, setCorrectFirstTryIds] = useState<Set<string>>(new Set())
   const [isFlipped, setIsFlipped] = useState(false)
   const [showConjugations, setShowConjugations] = useState(false)
+  const [showExampleTranslation, setShowExampleTranslation] = useState(false)
   const [studyState, setStudyState] = useState<StudyState>("studying")
   const [animating, setAnimating] = useState(false)
   const [direction, setDirection] = useState<"left" | "right" | null>(null)
@@ -103,6 +104,7 @@ export function StudyMode({ flashcards, folderName, onExit }: StudyModeProps) {
 
   useEffect(() => {
     setShowConjugations(false)
+    setShowExampleTranslation(false)
   }, [current?.id])
 
   // Save session when finished
@@ -440,6 +442,22 @@ export function StudyMode({ flashcards, folderName, onExit }: StudyModeProps) {
                       <p className="text-base text-foreground italic mt-2 leading-relaxed">
                         &ldquo;{current.example}&rdquo;
                       </p>
+                      {current.exampleTranslation && (
+                        <div className="mt-2">
+                          <button
+                            className="inline-flex items-center gap-1.5 text-xs font-medium text-primary/70 hover:text-primary transition-colors"
+                            onClick={(e) => { e.stopPropagation(); setShowExampleTranslation((v) => !v) }}
+                          >
+                            <Languages className="size-3.5" />
+                            {showExampleTranslation ? "Ocultar tradução" : "Traduzir frase"}
+                          </button>
+                          {showExampleTranslation && (
+                            <p className="text-sm text-muted-foreground mt-1 leading-relaxed">
+                              {current.exampleTranslation}
+                            </p>
+                          )}
+                        </div>
+                      )}
                     </div>
 
                     {current.falseCognate?.isFalseCognate && (

@@ -1,7 +1,7 @@
 "use client"
 
 import { useEffect, useState } from "react"
-import { Trash2, RotateCcw, Volume2, AlertTriangle, Pencil, Loader2 } from "lucide-react"
+import { Trash2, RotateCcw, Volume2, AlertTriangle, Pencil, Loader2, Languages } from "lucide-react"
 import { cn } from "@/lib/utils"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
@@ -103,6 +103,7 @@ function ClassifiedWordList({
 export function FlashcardCard({ flashcard, onDelete, onCreateFromAlternative, onUpdateFlashcard, layout = "grid" }: FlashcardCardProps) {
   const [isFlipped, setIsFlipped] = useState(false)
   const [showConjugations, setShowConjugations] = useState(false)
+  const [showExampleTranslation, setShowExampleTranslation] = useState(false)
   const [editOpen, setEditOpen] = useState(false)
   const [translationDraft, setTranslationDraft] = useState("")
   const [editBusy, setEditBusy] = useState(false)
@@ -178,6 +179,7 @@ export function FlashcardCard({ flashcard, onDelete, onCreateFromAlternative, on
         synonyms: revised.synonyms as any,
         antonyms: revised.antonyms as any,
         example: revised.example,
+        exampleTranslation: (revised as any).exampleTranslation || "",
         alternativeForms: revised.alternativeForms as any,
         falseCognate: revised.falseCognate,
       }
@@ -288,6 +290,22 @@ export function FlashcardCard({ flashcard, onDelete, onCreateFromAlternative, on
               <div>
                 <span className="text-xs font-medium text-muted-foreground">Exemplo:</span>
                 <p className="text-xs text-foreground italic">{flashcard.example}</p>
+                {flashcard.exampleTranslation && (
+                  <div className="mt-1">
+                    <button
+                      className="inline-flex items-center gap-1 text-[10px] font-medium text-primary/70 hover:text-primary transition-colors"
+                      onClick={(e) => { e.stopPropagation(); setShowExampleTranslation((v) => !v) }}
+                    >
+                      <Languages className="size-3" />
+                      {showExampleTranslation ? "Ocultar tradução" : "Traduzir frase"}
+                    </button>
+                    {showExampleTranslation && (
+                      <p className="text-[10px] text-muted-foreground mt-0.5 leading-snug">
+                        {flashcard.exampleTranslation}
+                      </p>
+                    )}
+                  </div>
+                )}
               </div>
             </div>
             {includeConjugations && flashcard.conjugations && (
@@ -505,6 +523,22 @@ export function FlashcardCard({ flashcard, onDelete, onCreateFromAlternative, on
               <p className="text-sm text-foreground italic mt-0.5">
                 {flashcard.example}
               </p>
+              {flashcard.exampleTranslation && (
+                <div className="mt-1.5">
+                  <button
+                    className="inline-flex items-center gap-1 text-[11px] font-medium text-primary/70 hover:text-primary transition-colors"
+                    onClick={(e) => { e.stopPropagation(); setShowExampleTranslation((v) => !v) }}
+                  >
+                    <Languages className="size-3" />
+                    {showExampleTranslation ? "Ocultar tradução" : "Traduzir frase"}
+                  </button>
+                  {showExampleTranslation && (
+                    <p className="text-xs text-muted-foreground mt-0.5 leading-snug">
+                      {flashcard.exampleTranslation}
+                    </p>
+                  )}
+                </div>
+              )}
             </div>
 
             {includeConjugations && flashcard.conjugations && (
