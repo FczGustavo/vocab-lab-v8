@@ -121,6 +121,9 @@ export async function generateFlashcardData(
 
   console.log(`[OpenRouter] Calling ${model} for word: ${word}`)
 
+  // Lógica TS para blindar siglas e expressões compostas
+  const isCompoundOrAcronym = word.trim().includes(" ") || (word === word.toUpperCase() && word.length > 1);
+
   const synonymsInstruction =
     synonymsLevel === 0
       ? `4. NÃO gere sinônimos ou antônimos. Retorne "synonyms": [] e "antonyms": [].`
@@ -145,13 +148,14 @@ export async function generateFlashcardData(
    - Se a palavra não tiver nenhuma nuance especial e não for sigla, retorne "".`
     : `3b. NOTA DE USO: NÃO gere notas de uso. Sempre retorne "usageNote": "".`
 
-  const alternativeFormsInstruction = includeAlternativeForms
-    ? `7. FORMAS ALTERNATIVAS (Derivações e Conversões): 
-   - ATENÇÃO/EXCEÇÃO: Se o termo principal for uma SIGLA ou uma EXPRESSÃO COMPOSTA (mais de uma palavra, ex: "challenging water quality"), NÃO gere formas alternativas. Retorne "alternativeForms": [].
-   - Para palavras únicas, SEMPRE QUE POSSÍVEL, force a inclusão de até 2 formas derivadas ou de conversão de classe gramatical muito comuns (ex: para "run", traga "runner" e "runny").
+  // Prompt original agressivo e perfeito restaurado (só é ativado para palavras únicas)
+  const alternativeFormsInstruction = includeAlternativeForms && !isCompoundOrAcronym
+    ? `7. FORMAS ALTERNATIVAS (Derivações e Conversões): SEMPRE QUE POSSÍVEL, force a inclusão de até 2 formas derivadas ou de conversão de classe gramatical muito comuns no Inglês Americano. 
+   - Exemplo prático: se o card for o verbo "run", busque listar o substantivo ("run" - a corrida) e um derivado ("runner" - o corredor, ou "runny" - escorrendo). Se for "use", traga "useful" e "usage".
 IMPORTANTE:
+   - Tente atingir o máximo de 2 formas sempre que existirem derivações naturais.
    - A classe gramatical ("partOfSpeech") dessas alternativas DEVE ser diferente da classe principal do card.
-   - A "word" deve ser a forma correta em INGLÊS.
+   - A "word" deve ser a forma correta em INGLÊS. Pode ser a mesma palavra-raiz atuando em outra classe gramatical.
    - Forneça uma tradução concisa e natural EM PORTUGUÊS BRASILEIRO (OBRIGATÓRIO incluir o artigo se for substantivo, ex: "a elevação").
    - Evite meta-definições ("o ato de...").
    - Forneça uma frase de exemplo EM INGLÊS usando essa forma alternativa.`
@@ -176,13 +180,13 @@ Quando receber uma palavra em inglês, siga estes passos para gerar dados de est
    - um GERÚNDIO / PARTICÍPIO PRESENTE (verb) expressando uma ação em andamento.
    Prefira "noun" quando a forma -ing comumente nomeia um objeto/sistema, especialmente no uso técnico.
 1. NORMALIZAÇÃO E SIGLAS:
-   - Se a entrada for uma sigla ou um termo técnico composto (ex: "challenging water quality (cwq)"), mantenha a forma original ou a sigla principal em "normalizedWord" e defina "partOfSpeech" para a classe apropriada (geralmente "noun").
+   - Se a entrada for uma sigla ou um termo técnico composto (ex: "challenging water quality (cwq)"), mantenha a forma original ou a sigla principal em "normalizedWord".
    - Se decidir que é um verbo simples, NORMALIZE para a forma base/infinitivo (ex: "running" → "run").
    - Se decidir que é um substantivo verbal, mantenha como está.
-2. A classe gramatical primária no Inglês Americano ("partOfSpeech").
+2. CLASSE GRAMATICAL ("partOfSpeech"): Classifique OBRIGATORIAMENTE a palavra. Use "noun", "verb", "adjective", etc. Se for uma sigla ou uma expressão com várias palavras, classifique como "phrase" ou "acronym".
 3. Tradução em Português Brasileiro. Forneça exatamente 1 ou 2 traduções mais comuns e precisas em português, separadas por barra (/).
    - Prefira uma tradução neutra e padrão (sem gírias locais ou construções muito informais, salvo se a original for assim).
-   - IMPORTANTE (artigos): Se a classe gramatical for "noun" (substantivo), SEMPRE inclua o artigo mais natural em português junto com a tradução (ex: "a proa", "o porto", "a qualidade"). Use "o/a" para singular e "os/as" para plural.
+   - IMPORTANTE (artigos): Se a classe gramatical for "noun" ou "phrase", SEMPRE inclua o artigo mais natural em português junto com a tradução (ex: "a proa", "o porto", "a qualidade"). Use "o/a" para singular e "os/as" para plural.
    - IMPORTANTE (evite meta-definições): NÃO traduza substantivos com explicações como "o ato de ..." / "a ação de ...".
    - Evite traduções ultra-específicas a menos que seja o significado principal.
 ${usageNoteInstruction}
@@ -250,15 +254,16 @@ export async function reviseFlashcardByTranslation(
   const includeUsageNote = input.includeUsageNote ?? true
   const efommMode = input.efommMode ?? false
 
+  const isCompoundOrAcronym = input.word.trim().includes(" ") || (input.word === input.word.toUpperCase() && input.word.length > 1);
+
   const synonymsInstruction =
     synonymsLevel === 0
       ? `NÃO gere sinônimos ou antônimos. Retorne "synonyms": [] e "antonyms": [].`
       : `Forneça até ${synonymsLevel} sinônimos e até ${synonymsLevel} antônimos em INGLÊS que correspondam ao sentido EXATO implícito pela tradução.`
 
-  const alternativeFormsInstruction = includeAlternativeForms
-    ? `FORMAS ALTERNATIVAS (Derivações e Conversões): 
-   - ATENÇÃO/EXCEÇÃO: Se o termo for uma SIGLA ou EXPRESSÃO COMPOSTA, NÃO gere formas alternativas. Retorne "alternativeForms": [].
-   - Para palavras únicas, SEMPRE QUE POSSÍVEL, inclua até 2 formas derivadas ou de conversão de classe gramatical.
+  const alternativeFormsInstruction = includeAlternativeForms && !isCompoundOrAcronym
+    ? `FORMAS ALTERNATIVAS (Derivações e Conversões): SEMPRE QUE POSSÍVEL, inclua até 2 formas derivadas ou de conversão de classe gramatical.
+   - Tente atingir o máximo de 2 formas sempre que existirem derivações naturais.
    - A classe gramatical deve ser diferente da classe principal.
    - A palavra deve estar em INGLÊS. Forneça tradução natural em PORTUGUÊS BRASILEIRO (com artigo para substantivos) e um exemplo em INGLÊS.
    - Evite meta-definições ("o ato de...").`
