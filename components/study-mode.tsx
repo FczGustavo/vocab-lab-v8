@@ -18,6 +18,8 @@ const partOfSpeechLabels: Record<PartOfSpeech, string> = {
   preposition: "Preposição",
   conjunction: "Conjunção",
   interjection: "Interjeição",
+  phrase: "Expressão",
+  acronym: "Sigla",
 }
 
 const partOfSpeechColors: Record<PartOfSpeech, string> = {
@@ -28,6 +30,8 @@ const partOfSpeechColors: Record<PartOfSpeech, string> = {
   preposition: "bg-rose-500/10 text-rose-600 dark:bg-rose-500/40 dark:text-rose-200",
   conjunction: "bg-cyan-500/10 text-cyan-600 dark:bg-cyan-500/40 dark:text-cyan-200",
   interjection: "bg-orange-500/10 text-orange-600 dark:bg-orange-500/40 dark:text-orange-200",
+  phrase: "bg-teal-500/10 text-teal-600 dark:bg-teal-500/40 dark:text-teal-200",
+  acronym: "bg-indigo-500/10 text-indigo-600 dark:bg-indigo-500/40 dark:text-indigo-200",
 }
 
 interface StudyModeProps {

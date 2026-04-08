@@ -39,6 +39,8 @@ const partOfSpeechLabels: Record<PartOfSpeech, string> = {
   preposition: "Preposição",
   conjunction: "Conjunção",
   interjection: "Interjeição",
+  phrase: "Expressão",
+  acronym: "Sigla",
 }
 
 const partOfSpeechColors: Record<PartOfSpeech, string> = {
@@ -49,6 +51,8 @@ const partOfSpeechColors: Record<PartOfSpeech, string> = {
   preposition: "bg-rose-500/15 text-rose-700 dark:text-rose-400",
   conjunction: "bg-cyan-500/15 text-cyan-700 dark:text-cyan-400",
   interjection: "bg-orange-500/15 text-orange-700 dark:text-orange-400",
+  phrase: "bg-teal-500/15 text-teal-700 dark:text-teal-400",
+  acronym: "bg-indigo-500/15 text-indigo-700 dark:text-indigo-400",
 }
 
 function ClassifiedWordList({ 
