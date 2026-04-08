@@ -146,12 +146,12 @@ export async function generateFlashcardData(
     : `3b. NOTA DE USO: NÃO gere notas de uso. Sempre retorne "usageNote": "".`
 
   const alternativeFormsInstruction = includeAlternativeForms
-    ? `7. FORMAS ALTERNATIVAS (Derivações e Conversões): SEMPRE QUE POSSÍVEL, force a inclusão de até 2 formas derivadas ou de conversão de classe gramatical muito comuns no Inglês Americano. 
-   - Exemplo prático: se o card for o verbo "run", busque listar o substantivo ("run" - a corrida) e um derivado ("runner" - o corredor, ou "runny" - escorrendo). Se for "use", traga "useful" e "usage".
+    ? `7. FORMAS ALTERNATIVAS (Derivações e Conversões): 
+   - ATENÇÃO/EXCEÇÃO: Se o termo principal for uma SIGLA ou uma EXPRESSÃO COMPOSTA (mais de uma palavra, ex: "challenging water quality"), NÃO gere formas alternativas. Retorne "alternativeForms": [].
+   - Para palavras únicas, SEMPRE QUE POSSÍVEL, force a inclusão de até 2 formas derivadas ou de conversão de classe gramatical muito comuns (ex: para "run", traga "runner" e "runny").
 IMPORTANTE:
-   - Tente atingir o máximo de 2 formas sempre que existirem derivações naturais.
    - A classe gramatical ("partOfSpeech") dessas alternativas DEVE ser diferente da classe principal do card.
-   - A "word" deve ser a forma correta em INGLÊS. Pode ser a mesma palavra-raiz atuando em outra classe gramatical.
+   - A "word" deve ser a forma correta em INGLÊS.
    - Forneça uma tradução concisa e natural EM PORTUGUÊS BRASILEIRO (OBRIGATÓRIO incluir o artigo se for substantivo, ex: "a elevação").
    - Evite meta-definições ("o ato de...").
    - Forneça uma frase de exemplo EM INGLÊS usando essa forma alternativa.`
@@ -256,8 +256,9 @@ export async function reviseFlashcardByTranslation(
       : `Forneça até ${synonymsLevel} sinônimos e até ${synonymsLevel} antônimos em INGLÊS que correspondam ao sentido EXATO implícito pela tradução.`
 
   const alternativeFormsInstruction = includeAlternativeForms
-    ? `FORMAS ALTERNATIVAS (Derivações e Conversões): SEMPRE QUE POSSÍVEL, inclua até 2 formas derivadas ou de conversão de classe gramatical (ex: substantivo/adjetivo).
-   - Tente atingir o máximo de 2 formas sempre que existirem derivações naturais.
+    ? `FORMAS ALTERNATIVAS (Derivações e Conversões): 
+   - ATENÇÃO/EXCEÇÃO: Se o termo for uma SIGLA ou EXPRESSÃO COMPOSTA, NÃO gere formas alternativas. Retorne "alternativeForms": [].
+   - Para palavras únicas, SEMPRE QUE POSSÍVEL, inclua até 2 formas derivadas ou de conversão de classe gramatical.
    - A classe gramatical deve ser diferente da classe principal.
    - A palavra deve estar em INGLÊS. Forneça tradução natural em PORTUGUÊS BRASILEIRO (com artigo para substantivos) e um exemplo em INGLÊS.
    - Evite meta-definições ("o ato de...").`
