@@ -178,13 +178,14 @@ Quando receber uma palavra em inglês, siga estes passos para gerar dados de est
    - um SUBSTANTIVO VERBAL (noun) nomeando um objeto, sistema, atividade estabelecida ou processo fixo (ex: "mooring", "rigging", "wiring"), ou
    - um GERÚNDIO / PARTICÍPIO PRESENTE (verb) expressando uma ação em andamento.
    Prefira "noun" quando a forma -ing comumente nomeia um objeto/sistema, especialmente no uso técnico.
-1. NORMALIZAÇÃO, SIGLAS E HÍFEN:
-   - Siglas e termos compostos (ex: "challenging water quality"): mantenha a forma original.
-   - HÍFEN: Palavras com hífen (ex: "might-be", "make-up") geralmente são substantivos ou adjetivos compostos. NUNCA invente verbos com hífen na frase de exemplo (ex: "It might-be true" é um erro grave de inglês). Se o usuário digitou um verbo com hífen por engano, REMOVA O HÍFEN em "normalizedWord".
-   - Verbos simples: NORMALIZE para a forma base/infinitivo (ex: "running" → "run").
+1. NORMALIZAÇÃO (CORREÇÃO DE ERROS E HÍFEN):
+   - ERRO DE HÍFEN EM VERBOS/EXPRESSÕES: Se o usuário enviou verbos compostos, modais ou phrasal verbs com hífen indevido (ex: "rely-on", "should-have", "carry-out"), CORRIJA substituindo o hífen por um ESPAÇO em "normalizedWord" (ex: "rely on", "should have"). PROIBIDO juntar as palavras (nunca retorne "relyon" ou "shouldhave").
+   - ERRO DE INFINITIVO: Se o usuário enviar "to-steer" ou "to steer", remova o "to" e normalize apenas para "steer".
+   - HÍFEN CORRETO: Substantivos ou adjetivos que exigem hífen (ex: "make-up", "might-be") mantêm o hífen.
+   - Siglas e termos compostos corretos (ex: "challenging water quality"): mantenha a forma original.
 2. CLASSE GRAMATICAL ("partOfSpeech"): Classifique OBRIGATORIAMENTE a palavra usando APENAS as classes do JSON. 
    - Retorne "acronym" para siglas. 
-   - Retorne "phrase" APENAS para expressões com mais de uma palavra SEPARADAS POR ESPAÇO. Palavras com hífen NÃO são "phrase", classifique-as por sua função (geralmente "noun" ou "adjective").
+   - Retorne "phrase" APENAS para expressões com mais de uma palavra SEPARADAS POR ESPAÇO (ex: "rely on", "should have"). Palavras ligadas por hífen NÃO são "phrase", classifique-as por sua função (geralmente "noun" ou "adjective").
 3. Tradução em Português Brasileiro. Forneça exatamente 1 ou 2 traduções mais comuns e precisas em português, separadas por barra (/).
    - Prefira uma tradução neutra e padrão.
    - TRADUÇÃO TÉCNICA (ANTI-ROBÔ): Para expressões compostas e siglas técnicas, evite traduções literais palavra por palavra. Use jargão natural. Exemplo: não traduza "challenging" em contexto de engenharia como "desafiadora", prefira "adversa", "crítica" ou "fora do padrão".
@@ -192,7 +193,7 @@ Quando receber uma palavra em inglês, siga estes passos para gerar dados de est
    - IMPORTANTE (evite meta-definições): NÃO traduza substantivos com explicações como "o ato de ..." / "a ação de ...".
 ${usageNoteInstruction}
 ${synonymsInstruction}
-5. Uma frase de exemplo natural em INGLÊS AMERICANO (garanta que a gramática esteja perfeita).
+5. Uma frase de exemplo natural em INGLÊS AMERICANO.
 ${conjugationsInstruction}
 ${alternativeFormsInstruction}
 
