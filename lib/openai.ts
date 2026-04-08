@@ -148,7 +148,6 @@ export async function generateFlashcardData(
    - Se a palavra não tiver nenhuma nuance especial e não for sigla, retorne "".`
     : `3b. NOTA DE USO: NÃO gere notas de uso. Sempre retorne "usageNote": "".`
 
-  // Prompt original agressivo e perfeito restaurado (só é ativado para palavras únicas)
   const alternativeFormsInstruction = includeAlternativeForms && !isCompoundOrAcronym
     ? `7. FORMAS ALTERNATIVAS (Derivações e Conversões): SEMPRE QUE POSSÍVEL, force a inclusão de até 2 formas derivadas ou de conversão de classe gramatical muito comuns no Inglês Americano. 
    - Exemplo prático: se o card for o verbo "run", busque listar o substantivo ("run" - a corrida) e um derivado ("runner" - o corredor, ou "runny" - escorrendo). Se for "use", traga "useful" e "usage".
@@ -182,13 +181,12 @@ Quando receber uma palavra em inglês, siga estes passos para gerar dados de est
 1. NORMALIZAÇÃO E SIGLAS:
    - Se a entrada for uma sigla ou um termo técnico composto (ex: "challenging water quality (cwq)"), mantenha a forma original ou a sigla principal em "normalizedWord".
    - Se decidir que é um verbo simples, NORMALIZE para a forma base/infinitivo (ex: "running" → "run").
-   - Se decidir que é um substantivo verbal, mantenha como está.
-2. CLASSE GRAMATICAL ("partOfSpeech"): Classifique OBRIGATORIAMENTE a palavra. Use "noun", "verb", "adjective", etc. Se for uma sigla ou uma expressão com várias palavras, classifique como "phrase" ou "acronym".
+2. CLASSE GRAMATICAL ("partOfSpeech"): Classifique OBRIGATORIAMENTE a palavra. Use "noun", "verb", "adjective", etc. Se for uma sigla, retorne "acronym". Se for uma expressão com várias palavras, retorne "phrase".
 3. Tradução em Português Brasileiro. Forneça exatamente 1 ou 2 traduções mais comuns e precisas em português, separadas por barra (/).
-   - Prefira uma tradução neutra e padrão (sem gírias locais ou construções muito informais, salvo se a original for assim).
+   - Prefira uma tradução neutra e padrão.
+   - TRADUÇÃO TÉCNICA (ANTI-ROBÔ): Para expressões compostas e siglas técnicas, evite traduções literais palavra por palavra. Use jargão natural. Exemplo: não traduza "challenging" em contexto de engenharia como "desafiadora", prefira "adversa", "crítica" ou "fora do padrão".
    - IMPORTANTE (artigos): Se a classe gramatical for "noun" ou "phrase", SEMPRE inclua o artigo mais natural em português junto com a tradução (ex: "a proa", "o porto", "a qualidade"). Use "o/a" para singular e "os/as" para plural.
    - IMPORTANTE (evite meta-definições): NÃO traduza substantivos com explicações como "o ato de ..." / "a ação de ...".
-   - Evite traduções ultra-específicas a menos que seja o significado principal.
 ${usageNoteInstruction}
 ${synonymsInstruction}
 5. Uma frase de exemplo natural em INGLÊS AMERICANO.
