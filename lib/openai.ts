@@ -139,10 +139,10 @@ export async function generateFlashcardData(
 
   const usageNoteInstruction = includeUsageNote
     ? `3b. NOTA DE USO (opcional): Seja EXTREMAMENTE DIDÁTICO, porém PRECISO e DIRETO AO PONTO (estilo flashcard, máximo absoluto de 2 frases curtas). 
-   - Explique a essência do uso, nuance ou contexto em PORTUGUÊS BRASILEIRO.
-   - PROIBIDO usar introduções longas (ex: não escreva "Esta palavra costuma indicar...", vá direto para "Indica...").
-   - Foque na regra prática. Exemplo bom: "Indica passagem física (go through) ou duração contínua (through the night). Comum com verbos de envio."
-   - Se a palavra não tiver nenhuma nuance especial de uso, retorne "".`
+   - SE A PALAVRA FOR UMA SIGLA (ex: CWQ), OBRIGATORIAMENTE escreva o que as letras significam em inglês.
+   - Explique a essência do uso, nuance ou conceito técnico em PORTUGUÊS BRASILEIRO.
+   - PROIBIDO usar introduções longas. Vá direto para a regra prática ou definição conceitual.
+   - Se a palavra não tiver nenhuma nuance especial e não for sigla, retorne "".`
     : `3b. NOTA DE USO: NÃO gere notas de uso. Sempre retorne "usageNote": "".`
 
   const alternativeFormsInstruction = includeAlternativeForms
@@ -175,16 +175,16 @@ Quando receber uma palavra em inglês, siga estes passos para gerar dados de est
    - um SUBSTANTIVO VERBAL (noun) nomeando um objeto, sistema, atividade estabelecida ou processo fixo (ex: "mooring", "rigging", "wiring"), ou
    - um GERÚNDIO / PARTICÍPIO PRESENTE (verb) expressando uma ação em andamento.
    Prefira "noun" quando a forma -ing comumente nomeia um objeto/sistema, especialmente no uso técnico.
-1. Normalização:
-   - Se decidir que é um verbo, NORMALIZE para a forma base/infinitivo (ex: "running" → "run") e retorne em "normalizedWord".
-   - Se decidir que é um substantivo verbal, mantenha como está em "normalizedWord" e trate a classe gramatical (partOfSpeech) primária como "noun".
+1. NORMALIZAÇÃO E SIGLAS:
+   - Se a entrada for uma sigla ou um termo técnico composto (ex: "challenging water quality (cwq)"), mantenha a forma original ou a sigla principal em "normalizedWord" e defina "partOfSpeech" para a classe apropriada (geralmente "noun").
+   - Se decidir que é um verbo simples, NORMALIZE para a forma base/infinitivo (ex: "running" → "run").
+   - Se decidir que é um substantivo verbal, mantenha como está.
 2. A classe gramatical primária no Inglês Americano ("partOfSpeech").
 3. Tradução em Português Brasileiro. Forneça exatamente 1 ou 2 traduções mais comuns e precisas em português, separadas por barra (/).
    - Prefira uma tradução neutra e padrão (sem gírias locais ou construções muito informais, salvo se a original for assim).
-   - IMPORTANTE (artigos): Se a classe gramatical for "noun" (substantivo), SEMPRE inclua o artigo mais natural em português junto com a tradução (ex: "a proa", "o porto", "a âncora"). Use "o/a" para singular e "os/as" para plural.
-   - IMPORTANTE (evite meta-definições): NÃO traduza substantivos com explicações como "o ato de ..." / "a ação de ...". Prefira traduções concisas (ex: para "drink" como substantivo, use "a bebida" em vez de "o ato de beber").
-   - Evite traduções ultra-específicas a menos que seja o significado principal (ex: NÃO use "encontro romântico" como padrão para "date", a menos que esse seja o sentido primário focado).
-   - Se duas traduções forem sinônimos perfeitos (ex: "beber / tomar"), escolha APENAS a que soa mais natural e retorne uma só.
+   - IMPORTANTE (artigos): Se a classe gramatical for "noun" (substantivo), SEMPRE inclua o artigo mais natural em português junto com a tradução (ex: "a proa", "o porto", "a qualidade"). Use "o/a" para singular e "os/as" para plural.
+   - IMPORTANTE (evite meta-definições): NÃO traduza substantivos com explicações como "o ato de ..." / "a ação de ...".
+   - Evite traduções ultra-específicas a menos que seja o significado principal.
 ${usageNoteInstruction}
 ${synonymsInstruction}
 5. Uma frase de exemplo natural em INGLÊS AMERICANO.
@@ -222,8 +222,8 @@ VERBOS (verbType):
     {
       role: "user",
       content: targetPartOfSpeech
-        ? `Gere dados de flashcard para a palavra/forma: "${word}". IMPORTANTE: Trate-a com o uso de "${targetPartOfSpeech}" e retorne "partOfSpeech" como "${targetPartOfSpeech}".`
-        : `Gere dados de flashcard para a palavra/forma: "${word}"`,
+        ? `Gere dados de flashcard para a palavra/forma/sigla: "${word}". IMPORTANTE: Trate-a com o uso de "${targetPartOfSpeech}" e retorne "partOfSpeech" como "${targetPartOfSpeech}".`
+        : `Gere dados de flashcard para a palavra/forma/sigla: "${word}"`,
     },
   ]
 
@@ -265,7 +265,8 @@ export async function reviseFlashcardByTranslation(
 
   const usageNoteInstruction = includeUsageNote
     ? `NOTA DE USO (opcional): Seja EXTREMAMENTE DIDÁTICO, porém PRECISO e DIRETO AO PONTO (estilo flashcard, máximo absoluto de 2 frases curtas). 
-   - Explique a essência do uso, nuance ou contexto em PORTUGUÊS BRASILEIRO.
+   - SE A PALAVRA FOR UMA SIGLA, OBRIGATORIAMENTE escreva o que as letras significam em inglês.
+   - Explique a essência do uso, nuance ou conceito em PORTUGUÊS BRASILEIRO.
    - PROIBIDO usar introduções longas. Vá direto para a regra prática.
    - Se a palavra não tiver nenhuma nuance especial de uso, retorne "".`
     : `NOTA DE USO: NÃO gere notas de uso. Sempre retorne "usageNote": "".`
@@ -283,10 +284,19 @@ Sua base de conhecimento é estritamente INGLÊS AMERICANO.
 ${efommInstruction}
 
 Você receberá:
+- uma palavra, sigla ou termo em inglês
+- uma classe gramatical fixa
+- uma NOVA tradução em português escolhida pelo usuário
 
 Sua tarefa:
+- Mantenha a mesma palavra/sigla em inglês e a mesma classe gramatical.
+- Atualize todos os outros campos para ficarem consistentes com essa NOVA tradução/sentido.
 
 Regras:
+- "translation" DEVE ser retornada exatamente como fornecida pelo usuário.
+- Para substantivos (nouns), caso você gere outras formas alternativas, use artigos em português ("a proa", "o porto").
+- Sinônimos/antônimos (em inglês) DEVEM incluir um tipo: "literal" | "figurative" | "slang".
+- Fidelidade: Liste apenas sinônimos e exemplos que se encaixem perfeitamente nesse novo sentido.
 
 Instrução de sinônimos/antônimos: ${synonymsInstruction}
 Instrução de nota de uso: ${usageNoteInstruction}
@@ -299,6 +309,7 @@ Retorne o JSON com esta estrutura exata (Chaves em inglês):
   "synonyms": [{"word": "x", "type": "literal" | "figurative" | "slang"}],
   "antonyms": [{"word": "y", "type": "literal" | "figurative" | "slang"}],
   "example": "Frase de exemplo em Inglês Americano para este sentido",
+  "exampleTranslation": "Tradução natural da frase acima em Português Brasileiro.",
   "alternativeForms": [{"word": "form", "partOfSpeech": "noun", "translation": "o/a ...", "example": "..." }]
 }`,
     },
@@ -326,7 +337,7 @@ export async function generateGrammarExercises(
 
   const typeInstructions =
     exerciseType === "fill-blank"
-      ? "Crie exercícios de preencher as lacunas (fill-in-the-blank) onde o aluno deve completar a frase com a palavra correta."
+      ? "Crie exercícios de preencher as lacunas (fill-in-the-blank) onde o aluno deve completar a frase com a palavra/sigla correta."
       : exerciseType === "verb-conjugation"
         ? "Crie exercícios de conjugação verbal onde o aluno deve conjugar o verbo corretamente no tempo verbal indicado no contexto (passado, presente contínuo, etc)."
         : "Crie uma mistura de exercícios de preencher lacunas e de conjugação verbal."
@@ -336,7 +347,7 @@ export async function generateGrammarExercises(
       role: "system",
       content: `Você é um professor de inglês criando exercícios focados para alunos falantes de Português Brasileiro. ${typeInstructions}
 
-Use APENAS estas palavras de vocabulário do aluno: ${words}
+Use APENAS estas palavras ou siglas do vocabulário do aluno: ${words}
 
 Responda em formato JSON com esta estrutura (MANTENHA AS CHAVES EM INGLÊS):
 {
@@ -347,7 +358,7 @@ Responda em formato JSON com esta estrutura (MANTENHA AS CHAVES EM INGLÊS):
       "sentence": "Frase em inglês com _____ para a lacuna OU o verbo entre parênteses indicando a ação",
       "answer": "a resposta correta em inglês",
       "hint": "dica útil EM PORTUGUÊS BRASILEIRO para ajudar o aluno",
-      "wordUsed": "a palavra do vocabulário que foi utilizada"
+      "wordUsed": "a palavra ou sigla do vocabulário que foi utilizada"
     }
   ]
 }
@@ -356,7 +367,7 @@ Crie ${count} exercícios. As frases devem ser naturais no Inglês Americano e m
     },
     {
       role: "user",
-      content: `Gere ${count} exercícios gramaticais do tipo ${exerciseType === "mixed" ? "mixed (misturados)" : exerciseType} usando minhas palavras de vocabulário.`,
+      content: `Gere ${count} exercícios gramaticais do tipo ${exerciseType === "mixed" ? "mixed (misturados)" : exerciseType} usando meu vocabulário.`,
     },
   ]
 
