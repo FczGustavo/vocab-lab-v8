@@ -17,6 +17,25 @@ interface OpenRouterResponse {
   }[]
 }
 
+function parseJsonContent<T>(raw: string): T {
+  try {
+    return JSON.parse(raw) as T
+  } catch {
+    const fenced = raw.match(/```json\s*([\s\S]*?)\s*```/i)
+    if (fenced?.[1]) {
+      return JSON.parse(fenced[1]) as T
+    }
+
+    const firstBrace = raw.indexOf("{")
+    const lastBrace = raw.lastIndexOf("}")
+    if (firstBrace !== -1 && lastBrace > firstBrace) {
+      return JSON.parse(raw.slice(firstBrace, lastBrace + 1)) as T
+    }
+
+    throw new Error("Resposta da IA não veio em JSON válido.")
+  }
+}
+
 async function callOpenRouter<T>(
   messages: OpenRouterMessage[],
   model: string = DEFAULT_AI_MODEL,
@@ -47,8 +66,21 @@ async function callOpenRouter<T>(
   })
 
   if (!response.ok) {
-    const error = await response.json()
-    throw new Error(error.error?.message || "Erro na chamada da API do OpenRouter")
+    const rawError = await response.text()
+    let message = `Erro na chamada da API do OpenRouter (status ${response.status})`
+
+    try {
+      const parsed = JSON.parse(rawError) as { error?: { message?: string } }
+      if (parsed?.error?.message) {
+        message = parsed.error.message
+      }
+    } catch {
+      if (rawError.trim()) {
+        message = `${message}: ${rawError.slice(0, 300)}`
+      }
+    }
+
+    throw new Error(message)
   }
 
   const data: OpenRouterResponse = await response.json()
@@ -58,7 +90,7 @@ async function callOpenRouter<T>(
     throw new Error("Resposta da IA vazia")
   }
 
-  return JSON.parse(content) as T
+  return parseJsonContent<T>(content)
 }
 
 export interface FlashcardAIResponse {

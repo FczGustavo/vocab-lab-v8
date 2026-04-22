@@ -17,6 +17,7 @@ export async function POST(req: Request) {
     return NextResponse.json(data)
   } catch (err) {
     const message = err instanceof Error ? err.message : "Erro ao gerar flashcard"
+    console.error("[api/ai/flashcard]", message)
     return NextResponse.json({ error: message }, { status: 500 })
   }
 }
