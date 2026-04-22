@@ -35,6 +35,21 @@ function asTrimmedString(value: unknown): string {
   return typeof value === "string" ? value.trim() : ""
 }
 
+function normalizeInlineWhitespace(value: unknown): string {
+  return asTrimmedString(value).replace(/\s+/g, " ")
+}
+
+function normalizeTranslationText(value: unknown): string {
+  const normalized = normalizeInlineWhitespace(value)
+  if (!normalized.includes("/")) return normalized
+
+  return normalized
+    .split("/")
+    .map((item) => item.trim())
+    .filter(Boolean)
+    .join(" / ")
+}
+
 function normalizePartOfSpeech(value: unknown, fallback: string = "noun"): string {
   const normalized = asTrimmedString(value).toLowerCase()
   return VALID_PARTS_OF_SPEECH.includes(normalized as (typeof VALID_PARTS_OF_SPEECH)[number])
@@ -56,7 +71,7 @@ function normalizeLexicalRelations(raw: unknown, maxItems: number) {
   const normalized = raw
     .map((item) => {
       const value = item as { word?: unknown; type?: unknown }
-      const word = asTrimmedString(value?.word)
+      const word = normalizeInlineWhitespace(value?.word)
       if (!word) return null
       return {
         word,
@@ -93,13 +108,15 @@ function normalizeAlternativeForms(
         translation?: unknown
         example?: unknown
       }
-      const word = asTrimmedString(value?.word)
+      const word = normalizeInlineWhitespace(value?.word)
       const partOfSpeech = normalizePartOfSpeech(value?.partOfSpeech)
-      const translation = asTrimmedString(value?.translation)
-      const example = asTrimmedString(value?.example)
+      const translation = normalizeTranslationText(value?.translation)
+      const example = normalizeInlineWhitespace(value?.example)
 
       if (!word || !translation || !example) return null
       if (word.toLowerCase() === mainWord.toLowerCase()) return null
+      if (word.includes(" ")) return null
+      if (partOfSpeech === "phrase" || partOfSpeech === "acronym") return null
 
       return {
         word,
@@ -176,15 +193,15 @@ function normalizeFlashcardResponse(
     targetPartOfSpeech?: string
   }
 ): FlashcardAIResponse {
-  const normalizedWord = asTrimmedString(raw?.normalizedWord) || originalWord.trim()
+  const normalizedWord = normalizeInlineWhitespace(raw?.normalizedWord) || normalizeInlineWhitespace(originalWord)
   const targetPos = options.targetPartOfSpeech
     ? normalizePartOfSpeech(options.targetPartOfSpeech)
     : undefined
   const partOfSpeech = targetPos ?? normalizePartOfSpeech(raw?.partOfSpeech)
-  const translation = asTrimmedString(raw?.translation)
-  const usageNote = asTrimmedString(raw?.usageNote)
-  const example = asTrimmedString(raw?.example)
-  const exampleTranslation = asTrimmedString(raw?.exampleTranslation)
+  const translation = normalizeTranslationText(raw?.translation)
+  const usageNote = normalizeInlineWhitespace(raw?.usageNote)
+  const example = normalizeInlineWhitespace(raw?.example)
+  const exampleTranslation = normalizeInlineWhitespace(raw?.exampleTranslation)
 
   const maxRelations = options.synonymsLevel
   const synonyms = normalizeLexicalRelations(raw?.synonyms, maxRelations)
@@ -213,7 +230,7 @@ function normalizeFlashcardResponse(
 
   const _verbReasoning =
     partOfSpeech === "verb"
-      ? asTrimmedString(raw?._verbReasoning) ||
+      ? normalizeInlineWhitespace(raw?._verbReasoning) ||
         `Passado é ${conjugations?.simplePast ?? "n/a"}. Termina em -ed/-d? ${verbType === "regular" ? "Yes" : "No"}. Tipo: ${verbType}`
       : "n/a"
 
@@ -230,6 +247,33 @@ function normalizeFlashcardResponse(
     _verbReasoning,
     verbType,
     conjugations,
+  }
+}
+
+function normalizeRevisionResponse(
+  raw: FlashcardRevisionResponse,
+  options: {
+    word: string
+    partOfSpeech: string
+    includeAlternativeForms: boolean
+    synonymsLevel: number
+    isCompoundOrAcronym: boolean
+  }
+): FlashcardRevisionResponse {
+  return {
+    translation: normalizeTranslationText(raw?.translation),
+    usageNote: normalizeInlineWhitespace(raw?.usageNote),
+    synonyms: normalizeLexicalRelations(raw?.synonyms, options.synonymsLevel),
+    antonyms: normalizeLexicalRelations(raw?.antonyms, options.synonymsLevel),
+    example: normalizeInlineWhitespace(raw?.example),
+    exampleTranslation: normalizeInlineWhitespace(raw?.exampleTranslation),
+    alternativeForms: normalizeAlternativeForms(
+      raw?.alternativeForms,
+      normalizeInlineWhitespace(options.word),
+      normalizePartOfSpeech(options.partOfSpeech),
+      options.includeAlternativeForms,
+      options.isCompoundOrAcronym
+    ),
   }
 }
 
@@ -402,6 +446,7 @@ export async function generateFlashcardData(
    - Exemplos de estilo aceito:
      * might: "Indica possibilidade remota ou incerteza. Também atua como alternativa formal, polida e cautelosa a 'can' em perguntas, sugestões e pedidos."
      * dwarfing: "Efeito de fazer algo parecer minúsculo ou insignificante devido a um contraste de proporção."
+     * challenging water quality or (CWQ): "Condição ambiental (alta turbidez, excesso de lama ou algas) que impede o funcionamento adequado do Sistema de Tratamento de Água de Lastro (BWMS), forçando a redução da velocidade da operação comercial do navio."
    - SE A PALAVRA FOR UMA SIGLA, OBRIGATORIAMENTE escreva o que as letras significam em inglês.
    - Explique a essência em PORTUGUÊS BRASILEIRO.
    - PROIBIDO dar "bronca" ou mencionar correções ortográficas que você ajustou.
@@ -411,6 +456,8 @@ export async function generateFlashcardData(
   const alternativeFormsInstruction = includeAlternativeForms && !isCompoundOrAcronym
     ? `7. FORMAS ALTERNATIVAS (Derivações e Conversões): SEMPRE QUE POSSÍVEL, force a inclusão de até 2 formas derivadas comuns no Inglês Americano. 
    - TRAVA DE EXPRESSÕES: Se a sua palavra final contiver ESPAÇOS, ABORTE esta regra e retorne "alternativeForms": [] obrigatoriamente.
+   - PROIBIDO usar "partOfSpeech" = "phrase" ou "acronym" em "alternativeForms".
+   - Cada "word" em "alternativeForms" deve ser UMA PALAVRA (sem espaços e sem sigla).
    - A classe gramatical ("partOfSpeech") DEVE ser diferente da principal.
    - A "word" deve ser em INGLÊS.
    - Forneça uma tradução SECA e DIRETA EM PORTUGUÊS BRASILEIRO (OBRIGATÓRIO incluir o artigo se for substantivo).
@@ -422,7 +469,8 @@ export async function generateFlashcardData(
  const efommInstruction = efommMode
     ? `MODO EFOMM (MARÍTIMO/NAVAL): APENAS aplique este modo se a palavra possuir um jargão ou significado TÉCNICO ESPECÍFICO no contexto marítimo, naval, portuário ou logístico que seja diferente do uso cotidiano.
    - REGRA ANTI-ALUCINAÇÃO: Se a palavra for de uso geral (ex: "dwarfing", "water", "run", "big") e significar exatamente a mesma coisa no mar e em terra, IGNORE este modo. 
-   - PROIBIDO forçar cenários navais em palavras comuns. NÃO crie notas de uso dizendo "Em contexto naval, refere-se a embarcações..." se a palavra não for exclusiva para isso. Apenas trate-a como Inglês Geral.`
+  - PROIBIDO forçar cenários navais em palavras comuns. NÃO crie notas de uso dizendo "Em contexto naval, refere-se a embarcações..." se a palavra não for exclusiva para isso. Apenas trate-a como Inglês Geral.
+  - Para siglas/termos técnicos de água de lastro (ex: CWQ, BWMS), priorize terminologia operacional consagrada e contexto real (turbidez alta, lama/algas, perda de eficiência do tratamento, redução de vazão/velocidade operacional).`
     : ``
 
   const messages: OpenRouterMessage[] = [
@@ -434,6 +482,7 @@ Sua base de conhecimento é estritamente INGLÊS AMERICANO.
 ${efommInstruction}
 
 Siga estes passos para gerar dados de estudo:
+0a. SIGLAS COM EXPANSÃO: Se a entrada vier no formato "termo completo (sigla)" (ex: "challenging water quality (cwq)"), normalize para a SIGLA em maiúsculas ("CWQ") e classifique como "acronym".
 0. MORFOLOGIA (-ing): Se a palavra terminar em "-ing", decida se é um SUBSTANTIVO VERBAL (noun - ex: "mooring") ou GERÚNDIO/PARTICÍPIO (verb). Prefira "noun" quando nomeia um objeto/sistema.
 1. NORMALIZAÇÃO:
    - ERRO DE HÍFEN EM VERBOS/EXPRESSÕES: Corrija silenciosamente ("look-forward-to" -> "look forward to"). PROIBIDO juntar as palavras.
@@ -446,6 +495,8 @@ Siga estes passos para gerar dados de estudo:
    - REGRA DE OURO: PROIBIDO incluir parênteses, explicações, contextos ou frases dentro do campo de tradução (NÃO faça: "ofuscamento (em relação a algo maior)").
    - PROIBIDO usar meta-definições ou frases ("o ato de...", "ficar menor que..."). A tradução deve ser a palavra equivalente, não o significado dela.
    - IMPORTANTE (artigos): Se for "noun" ou "phrase", SEMPRE inclua o artigo (ex: "a proa", "o porto").
+  - Se for "acronym" técnico (incluindo EFOMM), priorize tradução de uso profissional/operacional e EVITE literal forçada.
+  - Se houver alternativa operacional relevante, retorne no formato "tradução principal / alternativa operacional".
    - TRADUÇÃO TÉCNICA: Evite traduções literais em jargões.
 ${usageNoteInstruction}
 ${synonymsInstruction}
@@ -459,6 +510,7 @@ REGRAS DE ANTI-ALUCINAÇÃO (OBRIGATÓRIAS):
 - NÃO use Markdown, cercas de código, comentários, texto fora do JSON ou chaves extras.
 - NÃO contradiga a classe gramatical escolhida.
 - "normalizedWord" deve ser apenas a forma final normalizada da palavra (sem explicações).
+- Em "alternativeForms", cada item deve ser palavra única (sem espaços) e não pode ser sigla.
 
 Retorne um JSON exato (MANTENHA AS CHAVES EM INGLÊS):
 {
@@ -534,6 +586,8 @@ export async function reviseFlashcardByTranslation(
 
   const alternativeFormsInstruction = includeAlternativeForms && !isCompoundOrAcronym
     ? `FORMAS ALTERNATIVAS: SEMPRE QUE POSSÍVEL, inclua até 2 formas derivadas.
+   - PROIBIDO usar "partOfSpeech" = "phrase" ou "acronym".
+   - Cada "word" deve ser UMA PALAVRA (sem espaços e sem sigla).
    - A classe gramatical deve ser diferente da classe principal.
    - Forneça tradução SECA em PORTUGUÊS BRASILEIRO (com artigo para substantivos) e um exemplo em INGLÊS.
    - PROIBIDO meta-definições ("o ato de...").`
@@ -547,7 +601,8 @@ export async function reviseFlashcardByTranslation(
     : `NOTA DE USO: NÃO gere notas de uso. Sempre retorne "usageNote": "".`
 
   const efommInstruction = efommMode
-    ? `MODO EFOMM (MARÍTIMO): Dê preferência a contextos navais e marítimos se for plausível. Se alterar o significado, aponte isso na "usageNote" de forma direta e curta.`
+    ? `MODO EFOMM (MARÍTIMO): Dê preferência a contextos navais e marítimos se for plausível. Se alterar o significado, aponte isso na "usageNote" de forma direta e curta.
+   - Para siglas/termos técnicos de água de lastro (ex: CWQ, BWMS), priorize terminologia operacional consagrada e evite tradução literal forçada.`
     : ``
 
   const messages: OpenRouterMessage[] = [
@@ -568,7 +623,7 @@ Sua tarefa:
 
 Regras:
 - "translation" DEVE ser retornada exatamente como fornecida.
-- Sinônimos/antônimos (em inglês) DEVEM incluir um tipo: "literal" | "figurative" | "slang".
+- Sinônimos/antônimos (em inglês) DEVEM incluir um tipo: "literal" | "figurative" | "slang" | "abstract".
 - Fidelidade: Liste apenas sinônimos e exemplos que se encaixem perfeitamente nesse novo sentido.
 
 Instrução de sinônimos/antônimos: ${synonymsInstruction}
@@ -579,8 +634,8 @@ Retorne o JSON exato:
 {
   "translation": "tradução fornecida pelo usuário",
   "usageNote": "nota super direta em português",
-  "synonyms": [{"word": "x", "type": "literal" | "figurative" | "slang"}],
-  "antonyms": [{"word": "y", "type": "literal" | "figurative" | "slang"}],
+  "synonyms": [{"word": "x", "type": "literal" | "figurative" | "slang" | "abstract"}],
+  "antonyms": [{"word": "y", "type": "literal" | "figurative" | "slang" | "abstract"}],
   "example": "Frase de exemplo em Inglês",
   "exampleTranslation": "Tradução natural da frase",
   "alternativeForms": [{"word": "form", "partOfSpeech": "noun", "translation": "o/a ...", "example": "..." }]
@@ -596,7 +651,17 @@ Retorne o JSON exato:
     },
   ]
 
-  return callOpenRouter<FlashcardRevisionResponse>(messages, model, { type: "json_object" })
+  const raw = await callOpenRouter<FlashcardRevisionResponse>(messages, model, { type: "json_object" }, {
+    temperature: 0.2,
+  })
+
+  return normalizeRevisionResponse(raw, {
+    word: input.word,
+    partOfSpeech: input.partOfSpeech,
+    includeAlternativeForms,
+    synonymsLevel,
+    isCompoundOrAcronym,
+  })
 }
 
 export async function generateGrammarExercises(
