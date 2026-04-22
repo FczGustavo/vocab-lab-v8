@@ -773,7 +773,7 @@ export function GrammarPage() {
     <div className="w-full">
       <div className="mb-8 flex flex-col items-center gap-2 pt-2 sm:mb-10 sm:pt-4">
         <h1 className="select-none text-[clamp(2.2rem,11vw,3.25rem)] font-light leading-none tracking-[-0.04em] text-foreground/20">
-          GrammarLab
+          Grammar Lab
         </h1>
         <p className="text-[13px] text-muted-foreground/60">Questoes no estilo EFOMM EN AFA</p>
       </div>

@@ -13,7 +13,7 @@ const navItems = [
     icon: BookOpen,
   },
   {
-    label: "GrammarLab",
+    label: "Grammar Lab",
     href: "/grammar",
     icon: FlaskConical,
   },

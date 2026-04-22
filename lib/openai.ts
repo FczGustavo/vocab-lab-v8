@@ -17,6 +17,215 @@ interface OpenRouterResponse {
   }[]
 }
 
+const VALID_PARTS_OF_SPEECH = [
+  "verb",
+  "noun",
+  "adjective",
+  "adverb",
+  "preposition",
+  "conjunction",
+  "interjection",
+  "phrase",
+  "acronym",
+] as const
+
+const VALID_RELATION_TYPES = ["literal", "figurative", "slang", "abstract"] as const
+
+function asTrimmedString(value: unknown): string {
+  return typeof value === "string" ? value.trim() : ""
+}
+
+function normalizePartOfSpeech(value: unknown, fallback: string = "noun"): string {
+  const normalized = asTrimmedString(value).toLowerCase()
+  return VALID_PARTS_OF_SPEECH.includes(normalized as (typeof VALID_PARTS_OF_SPEECH)[number])
+    ? normalized
+    : fallback
+}
+
+function normalizeRelationType(value: unknown): (typeof VALID_RELATION_TYPES)[number] {
+  const normalized = asTrimmedString(value).toLowerCase()
+  return VALID_RELATION_TYPES.includes(normalized as (typeof VALID_RELATION_TYPES)[number])
+    ? (normalized as (typeof VALID_RELATION_TYPES)[number])
+    : "literal"
+}
+
+function normalizeLexicalRelations(raw: unknown, maxItems: number) {
+  if (!Array.isArray(raw) || maxItems <= 0) return []
+
+  const seen = new Set<string>()
+  const normalized = raw
+    .map((item) => {
+      const value = item as { word?: unknown; type?: unknown }
+      const word = asTrimmedString(value?.word)
+      if (!word) return null
+      return {
+        word,
+        type: normalizeRelationType(value?.type),
+      }
+    })
+    .filter((item): item is { word: string; type: (typeof VALID_RELATION_TYPES)[number] } => Boolean(item))
+    .filter((item) => {
+      const key = item.word.toLowerCase()
+      if (seen.has(key)) return false
+      seen.add(key)
+      return true
+    })
+    .slice(0, maxItems)
+
+  return normalized
+}
+
+function normalizeAlternativeForms(
+  raw: unknown,
+  mainPartOfSpeech: string,
+  includeAlternativeForms: boolean,
+  isCompoundOrAcronym: boolean
+) {
+  if (!includeAlternativeForms || isCompoundOrAcronym || !Array.isArray(raw)) return []
+
+  const seen = new Set<string>()
+  const normalized = raw
+    .map((item) => {
+      const value = item as {
+        word?: unknown
+        partOfSpeech?: unknown
+        translation?: unknown
+        example?: unknown
+      }
+      const word = asTrimmedString(value?.word)
+      const partOfSpeech = normalizePartOfSpeech(value?.partOfSpeech)
+      const translation = asTrimmedString(value?.translation)
+      const example = asTrimmedString(value?.example)
+
+      if (!word || !translation || !example) return null
+      if (partOfSpeech === mainPartOfSpeech) return null
+
+      return {
+        word,
+        partOfSpeech,
+        translation,
+        example,
+      }
+    })
+    .filter(
+      (
+        item
+      ): item is { word: string; partOfSpeech: string; translation: string; example: string } => Boolean(item)
+    )
+    .filter((item) => {
+      const key = item.word.toLowerCase()
+      if (seen.has(key)) return false
+      seen.add(key)
+      return true
+    })
+    .slice(0, 2)
+
+  return normalized
+}
+
+function normalizeConjugations(raw: unknown): FlashcardAIResponse["conjugations"] {
+  if (!raw || typeof raw !== "object") return null
+  const value = raw as Partial<NonNullable<FlashcardAIResponse["conjugations"]>>
+
+  const simplePresent = asTrimmedString(value.simplePresent)
+  const simplePast = asTrimmedString(value.simplePast)
+  const presentContinuous = asTrimmedString(value.presentContinuous)
+  const pastContinuous = asTrimmedString(value.pastContinuous)
+  const presentPerfect = asTrimmedString(value.presentPerfect)
+  const pastPerfect = asTrimmedString(value.pastPerfect)
+
+  const allFilled =
+    simplePresent &&
+    simplePast &&
+    presentContinuous &&
+    pastContinuous &&
+    presentPerfect &&
+    pastPerfect
+
+  if (!allFilled) return null
+
+  return {
+    simplePresent,
+    simplePast,
+    presentContinuous,
+    pastContinuous,
+    presentPerfect,
+    pastPerfect,
+  }
+}
+
+function inferVerbTypeFromSimplePast(simplePast: string): "regular" | "irregular" {
+  const normalized = simplePast.toLowerCase().trim()
+  return normalized.endsWith("ed") || normalized.endsWith("d") ? "regular" : "irregular"
+}
+
+function normalizeFlashcardResponse(
+  raw: FlashcardAIResponse,
+  originalWord: string,
+  options: {
+    includeConjugations: boolean
+    includeAlternativeForms: boolean
+    synonymsLevel: number
+    isCompoundOrAcronym: boolean
+    targetPartOfSpeech?: string
+  }
+): FlashcardAIResponse {
+  const normalizedWord = asTrimmedString(raw?.normalizedWord) || originalWord.trim()
+  const targetPos = options.targetPartOfSpeech
+    ? normalizePartOfSpeech(options.targetPartOfSpeech)
+    : undefined
+  const partOfSpeech = targetPos ?? normalizePartOfSpeech(raw?.partOfSpeech)
+  const translation = asTrimmedString(raw?.translation)
+  const usageNote = asTrimmedString(raw?.usageNote)
+  const example = asTrimmedString(raw?.example)
+  const exampleTranslation = asTrimmedString(raw?.exampleTranslation)
+
+  const maxRelations = options.synonymsLevel
+  const synonyms = normalizeLexicalRelations(raw?.synonyms, maxRelations)
+  const antonyms = normalizeLexicalRelations(raw?.antonyms, maxRelations)
+  const alternativeForms = normalizeAlternativeForms(
+    raw?.alternativeForms,
+    partOfSpeech,
+    options.includeAlternativeForms,
+    options.isCompoundOrAcronym
+  )
+
+  const shouldHaveConjugations = options.includeConjugations && partOfSpeech === "verb"
+  const conjugations = shouldHaveConjugations ? normalizeConjugations(raw?.conjugations) : null
+
+  const verbTypeFromModel = asTrimmedString(raw?.verbType)
+  const inferredVerbType = conjugations?.simplePast
+    ? inferVerbTypeFromSimplePast(conjugations.simplePast)
+    : "irregular"
+  const verbType =
+    partOfSpeech === "verb"
+      ? verbTypeFromModel === "regular" || verbTypeFromModel === "irregular"
+        ? (verbTypeFromModel as "regular" | "irregular")
+        : inferredVerbType
+      : null
+
+  const _verbReasoning =
+    partOfSpeech === "verb"
+      ? asTrimmedString(raw?._verbReasoning) ||
+        `Passado é ${conjugations?.simplePast ?? "n/a"}. Termina em -ed/-d? ${verbType === "regular" ? "Yes" : "No"}. Tipo: ${verbType}`
+      : "n/a"
+
+  return {
+    normalizedWord,
+    partOfSpeech,
+    translation,
+    usageNote,
+    synonyms,
+    antonyms,
+    example,
+    exampleTranslation,
+    alternativeForms,
+    _verbReasoning,
+    verbType,
+    conjugations,
+  }
+}
+
 function parseJsonContent<T>(raw: string): T {
   try {
     return JSON.parse(raw) as T
@@ -39,7 +248,8 @@ function parseJsonContent<T>(raw: string): T {
 async function callOpenRouter<T>(
   messages: OpenRouterMessage[],
   model: string = DEFAULT_AI_MODEL,
-  responseFormat?: { type: "json_object" }
+  responseFormat?: { type: "json_object" },
+  options?: { temperature?: number }
 ): Promise<T> {
   const apiKey = process.env.OPENROUTER_API_KEY
   if (!apiKey) {
@@ -60,7 +270,7 @@ async function callOpenRouter<T>(
     body: JSON.stringify({
       model,
       messages,
-      temperature: 0.7,
+      temperature: options?.temperature ?? 0.7,
       ...(responseFormat && { response_format: responseFormat }),
     }),
   })
@@ -165,10 +375,11 @@ export async function generateFlashcardData(
     synonymsLevel === 0
       ? `4. NÃO gere sinônimos ou antônimos. Retorne "synonyms": [] e "antonyms": [].`
       : `4. SINÔNIMOS E ANTÔNIMOS (Em Inglês Americano): Forneça até ${synonymsLevel} sinônimos e até ${synonymsLevel} antônimos que correspondam EXATAMENTE ao sentido do card (mesma classe gramatical + mesmo significado). Se não existirem, retorne [].
-   - Cada sinônimo/antônimo DEVE incluir um tipo: "literal" | "figurative" | "slang".
+   - Cada sinônimo/antônimo DEVE incluir um tipo: "literal" | "figurative" | "slang" | "abstract".
      * literal: ação física / objeto concreto / denotação direta
      * figurative: uso metafórico/abstrato (não físico)
      * slang: expressão muito informal / coloquial / idiomática
+     * abstract: conceito geral/intelectual sem foco em fisicalidade
    - Fidelidade ao contexto: não inclua palavras que servem apenas para outros sentidos da palavra.
    - Exclusão: evite palavras genéricas ou preguiçosas ("get", "do", "go") a menos que sejam a melhor correspondência.
    - Antônimos: prefira opostos diretos do significado pretendido.`
@@ -197,9 +408,10 @@ export async function generateFlashcardData(
    - Forneça uma frase de exemplo EM INGLÊS usando essa forma alternativa.`
     : `7. FORMAS ALTERNATIVAS: NÃO gere formas alternativas. Sempre retorne "alternativeForms": [].`
 
-  const efommInstruction = efommMode
-    ? `MODO EFOMM (MARÍTIMO/NAVAL): Priorize significados, jargões e exemplos do contexto marítimo, naval, portuário e logístico (Inglês Técnico Marítimo). 
-NÃO force se a palavra não existir nesse contexto. Se o significado alterar em relação ao uso civil/diário, aplique a regra na "usageNote" de forma SECA e DIRETA (ex: "No contexto naval, refere-se à amarração da embarcação").`
+ const efommInstruction = efommMode
+    ? `MODO EFOMM (MARÍTIMO/NAVAL): APENAS aplique este modo se a palavra possuir um jargão ou significado TÉCNICO ESPECÍFICO no contexto marítimo, naval, portuário ou logístico que seja diferente do uso cotidiano.
+   - REGRA ANTI-ALUCINAÇÃO: Se a palavra for de uso geral (ex: "dwarfing", "water", "run", "big") e significar exatamente a mesma coisa no mar e em terra, IGNORE este modo. 
+   - PROIBIDO forçar cenários navais em palavras comuns. NÃO crie notas de uso dizendo "Em contexto naval, refere-se a embarcações..." se a palavra não for exclusiva para isso. Apenas trate-a como Inglês Geral.`
     : ``
 
   const messages: OpenRouterMessage[] = [
@@ -230,14 +442,21 @@ ${synonymsInstruction}
 ${conjugationsInstruction}
 ${alternativeFormsInstruction}
 
+REGRAS DE ANTI-ALUCINAÇÃO (OBRIGATÓRIAS):
+- NÃO invente significado técnico específico se ele não for consagrado.
+- Se houver dúvida semântica, prefira saída conservadora: "usageNote": "", "synonyms": [], "antonyms": [], "alternativeForms": [].
+- NÃO use Markdown, cercas de código, comentários, texto fora do JSON ou chaves extras.
+- NÃO contradiga a classe gramatical escolhida.
+- "normalizedWord" deve ser apenas a forma final normalizada da palavra (sem explicações).
+
 Retorne um JSON exato (MANTENHA AS CHAVES EM INGLÊS):
 {
   "normalizedWord": "a palavra",
   "partOfSpeech": "verb" | "noun" | "adjective" | "adverb" | "preposition" | "conjunction" | "interjection" | "phrase" | "acronym",
   "translation": "tradução seca (com artigo para substantivos)",
   "usageNote": "nota super direta ou string vazia",
-  "synonyms": [{"word": "synonym1", "type": "literal" | "figurative" | "slang"}],
-  "antonyms": [{"word": "antonym1", "type": "literal" | "figurative" | "slang"}],
+  "synonyms": [{"word": "synonym1", "type": "literal" | "figurative" | "slang" | "abstract"}],
+  "antonyms": [{"word": "antonym1", "type": "literal" | "figurative" | "slang" | "abstract"}],
   "example": "Frase de exemplo em inglês.",
   "exampleTranslation": "Tradução natural da frase em Português Brasileiro.",
   "alternativeForms": [{"word": "elevation", "partOfSpeech": "noun", "translation": "a elevação", "example": "The elevation is 2,000 meters."}],
@@ -247,7 +466,7 @@ Retorne um JSON exato (MANTENHA AS CHAVES EM INGLÊS):
 }
 
 REGRAS CRÍTICAS DE VERBOS:
-   - Se NÃO for verbo: "_verbReasoning": "n/a", "verbType": null.
+  - Se NÃO for verbo: "_verbReasoning": "n/a", "verbType": null e "conjugations": null.
    - Se FOR verbo: "_verbReasoning" decide. Se passado termina em -ed/-d (Yes), "verbType": "regular". Senão, "verbType": "irregular".`,
     },
     {
@@ -258,8 +477,23 @@ REGRAS CRÍTICAS DE VERBOS:
     },
   ]
 
-  return callOpenRouter<FlashcardAIResponse>(messages, model, {
-    type: "json_object",
+  const raw = await callOpenRouter<FlashcardAIResponse>(
+    messages,
+    model,
+    {
+      type: "json_object",
+    },
+    {
+      temperature: 0.2,
+    }
+  )
+
+  return normalizeFlashcardResponse(raw, word, {
+    includeConjugations,
+    includeAlternativeForms,
+    synonymsLevel,
+    isCompoundOrAcronym,
+    targetPartOfSpeech,
   })
 }
 
