@@ -77,6 +77,7 @@ function normalizeLexicalRelations(raw: unknown, maxItems: number) {
 
 function normalizeAlternativeForms(
   raw: unknown,
+  mainWord: string,
   mainPartOfSpeech: string,
   includeAlternativeForms: boolean,
   isCompoundOrAcronym: boolean
@@ -98,7 +99,7 @@ function normalizeAlternativeForms(
       const example = asTrimmedString(value?.example)
 
       if (!word || !translation || !example) return null
-      if (partOfSpeech === mainPartOfSpeech) return null
+      if (word.toLowerCase() === mainWord.toLowerCase()) return null
 
       return {
         word,
@@ -118,9 +119,14 @@ function normalizeAlternativeForms(
       seen.add(key)
       return true
     })
-    .slice(0, 2)
 
-  return normalized
+  const preferred = normalized.filter((item) => item.partOfSpeech !== mainPartOfSpeech)
+  if (preferred.length > 0) {
+    return preferred.slice(0, 2)
+  }
+
+  // Fallback: if model missed POS conversion but produced real derivations, keep them.
+  return normalized.slice(0, 2)
 }
 
 function normalizeConjugations(raw: unknown): FlashcardAIResponse["conjugations"] {
@@ -185,6 +191,7 @@ function normalizeFlashcardResponse(
   const antonyms = normalizeLexicalRelations(raw?.antonyms, maxRelations)
   const alternativeForms = normalizeAlternativeForms(
     raw?.alternativeForms,
+    normalizedWord,
     partOfSpeech,
     options.includeAlternativeForms,
     options.isCompoundOrAcronym
@@ -391,7 +398,10 @@ export async function generateFlashcardData(
   const usageNoteInstruction = includeUsageNote
     ? `3b. NOTA DE USO / CONTEXTO (opcional): Seja ULTRA CONCISO e DIRETO (estilo flashcard, máximo de 1 a 2 frases curtas). 
    - PROIBIDO usar introduções narrativas ou metalinguagem (NÃO escreva "A palavra X descreve...", "Diz-se quando...", "É comum em...").
-   - Escreva DIRETAMENTE a regra ou nuance (Ex: "Usado para indicar inferioridade em tamanho ou escala." em vez de "Dwarfing é uma palavra usada para indicar...").
+   - Escreva DIRETAMENTE a regra ou nuance em formato didático de bolso.
+   - Exemplos de estilo aceito:
+     * might: "Indica possibilidade remota ou incerteza. Também atua como alternativa formal, polida e cautelosa a 'can' em perguntas, sugestões e pedidos."
+     * dwarfing: "Efeito de fazer algo parecer minúsculo ou insignificante devido a um contraste de proporção."
    - SE A PALAVRA FOR UMA SIGLA, OBRIGATORIAMENTE escreva o que as letras significam em inglês.
    - Explique a essência em PORTUGUÊS BRASILEIRO.
    - PROIBIDO dar "bronca" ou mencionar correções ortográficas que você ajustou.
@@ -405,7 +415,8 @@ export async function generateFlashcardData(
    - A "word" deve ser em INGLÊS.
    - Forneça uma tradução SECA e DIRETA EM PORTUGUÊS BRASILEIRO (OBRIGATÓRIO incluir o artigo se for substantivo).
    - Evite meta-definições ("o ato de...").
-   - Forneça uma frase de exemplo EM INGLÊS usando essa forma alternativa.`
+   - Forneça uma frase de exemplo EM INGLÊS usando essa forma alternativa.
+   - Se a palavra for simples (uma única palavra, não sigla) e existir derivação comum, retorne PELO MENOS 1 item em "alternativeForms".`
     : `7. FORMAS ALTERNATIVAS: NÃO gere formas alternativas. Sempre retorne "alternativeForms": [].`
 
  const efommInstruction = efommMode
@@ -444,7 +455,7 @@ ${alternativeFormsInstruction}
 
 REGRAS DE ANTI-ALUCINAÇÃO (OBRIGATÓRIAS):
 - NÃO invente significado técnico específico se ele não for consagrado.
-- Se houver dúvida semântica, prefira saída conservadora: "usageNote": "", "synonyms": [], "antonyms": [], "alternativeForms": [].
+- Se houver dúvida semântica, prefira saída conservadora: "usageNote": "", "synonyms": [], "antonyms": [].
 - NÃO use Markdown, cercas de código, comentários, texto fora do JSON ou chaves extras.
 - NÃO contradiga a classe gramatical escolhida.
 - "normalizedWord" deve ser apenas a forma final normalizada da palavra (sem explicações).
