@@ -448,6 +448,26 @@ export function useFlashcardsDB() {
     }
   }, [])
 
+  const addToReviewFolder = useCallback(
+    async (id: string): Promise<boolean> => {
+      const card = flashcards.find((f) => f.id === id)
+      if (!card || card.isReviewFolder) return false
+      return updateFlashcard({ ...card, isReviewFolder: true })
+    },
+    [flashcards, updateFlashcard]
+  )
+
+  const removeFromReviewFolder = useCallback(
+    async (id: string): Promise<boolean> => {
+      const card = flashcards.find((f) => f.id === id)
+      if (!card) return false
+      return updateFlashcard({ ...card, isReviewFolder: false })
+    },
+    [flashcards, updateFlashcard]
+  )
+
+  const reviewFlashcards = flashcards.filter((f) => f.isReviewFolder === true)
+
   const filteredFlashcards = selectedFolderId
     ? flashcards.filter(f => f.folderId === selectedFolderId)
     : flashcards
@@ -455,6 +475,7 @@ export function useFlashcardsDB() {
   return {
     flashcards: filteredFlashcards,
     allFlashcards: flashcards,
+    reviewFlashcards,
     folders,
     selectedFolderId,
     setSelectedFolderId,
@@ -465,6 +486,8 @@ export function useFlashcardsDB() {
     moveFlashcardToFolder,
     addFolder,
     deleteFolder,
+    addToReviewFolder,
+    removeFromReviewFolder,
     getRandomFlashcards,
     importAllData,
     refresh: loadData,

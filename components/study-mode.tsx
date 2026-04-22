@@ -1,7 +1,7 @@
 "use client"
 
 import { useState, useCallback, useEffect } from "react"
-import { X, RotateCcw, CheckCircle2, XCircle, Volume2, ChevronRight, Trophy, RotateCw, AlertTriangle, Languages } from "lucide-react"
+import { X, CheckCircle2, XCircle, Volume2, Trophy, RotateCw, Languages, Rotate3D } from "lucide-react"
 import { cn } from "@/lib/utils"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
@@ -23,21 +23,22 @@ const partOfSpeechLabels: Record<PartOfSpeech, string> = {
 }
 
 const partOfSpeechColors: Record<PartOfSpeech, string> = {
-  verb: "bg-blue-500/10 text-blue-600 dark:bg-blue-500/40 dark:text-blue-200",
-  noun: "bg-emerald-500/10 text-emerald-600 dark:bg-emerald-500/40 dark:text-emerald-200",
-  adjective: "bg-amber-500/10 text-amber-600 dark:bg-amber-500/40 dark:text-amber-200",
-  adverb: "bg-purple-500/10 text-purple-600 dark:bg-purple-500/40 dark:text-purple-200",
-  preposition: "bg-rose-500/10 text-rose-600 dark:bg-rose-500/40 dark:text-rose-200",
-  conjunction: "bg-cyan-500/10 text-cyan-600 dark:bg-cyan-500/40 dark:text-cyan-200",
-  interjection: "bg-orange-500/10 text-orange-600 dark:bg-orange-500/40 dark:text-orange-200",
-  phrase: "bg-teal-500/10 text-teal-600 dark:bg-teal-500/40 dark:text-teal-200",
-  acronym: "bg-indigo-500/10 text-indigo-600 dark:bg-indigo-500/40 dark:text-indigo-200",
+  verb: "ghost-tag bg-blue-500/10 text-blue-700 dark:bg-blue-400/10 dark:text-blue-300",
+  noun: "ghost-tag bg-emerald-500/10 text-emerald-700 dark:bg-emerald-400/10 dark:text-emerald-300",
+  adjective: "ghost-tag bg-amber-500/10 text-amber-700 dark:bg-amber-400/10 dark:text-amber-300",
+  adverb: "ghost-tag bg-purple-500/10 text-purple-700 dark:bg-purple-400/10 dark:text-purple-300",
+  preposition: "ghost-tag bg-rose-500/10 text-rose-700 dark:bg-rose-400/10 dark:text-rose-300",
+  conjunction: "ghost-tag bg-cyan-500/10 text-cyan-700 dark:bg-cyan-400/10 dark:text-cyan-300",
+  interjection: "ghost-tag bg-orange-500/10 text-orange-700 dark:bg-orange-400/10 dark:text-orange-300",
+  phrase: "ghost-tag bg-teal-500/10 text-teal-700 dark:bg-teal-400/10 dark:text-teal-300",
+  acronym: "ghost-tag bg-indigo-500/10 text-indigo-700 dark:bg-indigo-400/10 dark:text-indigo-300",
 }
 
 interface StudyModeProps {
   flashcards: Flashcard[]
   folderName: string
   onExit: () => void
+  onMarkForReview?: (id: string) => Promise<boolean>
 }
 
 type StudyState = "studying" | "finished"
@@ -62,7 +63,7 @@ function ClassifiedWordList({ words, label, maxCount }: { words: ClassifiedWord[
                 ? "bg-amber-500/10 text-amber-800 dark:bg-amber-500/30 dark:text-amber-100"
                 : "bg-purple-500/10 text-purple-700 dark:bg-purple-500/30 dark:text-purple-100"
           return (
-            <Badge key={idx} className={cn("text-xs font-medium border-0 py-0.5 px-2", tone)}>
+            <Badge key={idx} className={cn("ghost-tag text-xs font-medium border-0 py-0.5 px-2", tone)}>
               {item.word}
               <span className="ml-1 opacity-50 text-[9px] font-normal">
                 ({tag})
@@ -75,7 +76,7 @@ function ClassifiedWordList({ words, label, maxCount }: { words: ClassifiedWord[
   )
 }
 
-export function StudyMode({ flashcards, folderName, onExit }: StudyModeProps) {
+export function StudyMode({ flashcards, folderName, onExit, onMarkForReview }: StudyModeProps) {
   const { saveStudySession } = useGrammarProgress()
   const { enabled: animationsEnabled } = useAnimations()
   const { synonymsLevel, includeConjugations, includeAlternativeForms, includeUsageNote } = useAiPreferences()
@@ -168,6 +169,10 @@ export function StudyMode({ flashcards, folderName, onExit }: StudyModeProps) {
             ...prev,
             [current.id]: (prev[current.id] ?? 0) + 1,
           }))
+          // Mark for review if first time getting this card wrong
+          if (!wrongCount[current.id] && onMarkForReview) {
+            onMarkForReview(current.id)
+          }
         }
 
         setIsFlipped(false)
@@ -175,7 +180,7 @@ export function StudyMode({ flashcards, folderName, onExit }: StudyModeProps) {
         setDirection(null)
       }, animationsEnabled ? 350 : 50)
     },
-    [animating, current, animationsEnabled, wrongCount]
+    [animating, current, animationsEnabled, wrongCount, onMarkForReview]
   )
 
   const restart = () => {
@@ -342,26 +347,21 @@ export function StudyMode({ flashcards, folderName, onExit }: StudyModeProps) {
             >
               <div
                 className={cn(
-                  "relative h-full w-full transform-style-3d shadow-xl rounded-2xl transition-transform",
+                  "relative h-full w-full transform-style-3d rounded-2xl transition-transform",
                   animationsEnabled ? "duration-700" : "duration-0",
                   isFlipped && "rotate-y-180"
                 )}
               >
                 {/* Front */}
-                <div className="absolute inset-0 backface-hidden rounded-2xl border border-border bg-card p-8 flex flex-col shadow-sm">
+                <div className="surface-card surface-card-elevated interactive-lift absolute inset-0 backface-hidden rounded-[26px] bg-card p-8 flex flex-col">
                   <div className="flex items-center justify-between">
                     <div className="flex gap-2 items-center">
                       <Badge className={cn("text-xs font-medium border-0", partOfSpeechColors[current.partOfSpeech || "noun"])}>
                         {partOfSpeechLabels[current.partOfSpeech || "noun"]}
                       </Badge>
                       {current.verbType && (
-                        <Badge variant="outline" className="text-[10px] uppercase tracking-wider border-primary/30 text-primary">
+                        <Badge variant="outline" className="ghost-tag border-0 bg-primary/10 text-[10px] uppercase tracking-wider text-primary">
                           {current.verbType}
-                        </Badge>
-                      )}
-                      {current.falseCognate?.isFalseCognate && (
-                        <Badge className="text-[10px] uppercase tracking-wider bg-amber-500 hover:bg-amber-600 border-0 text-white font-bold">
-                          Falso Cognato
                         </Badge>
                       )}
                     </div>
@@ -379,32 +379,24 @@ export function StudyMode({ flashcards, folderName, onExit }: StudyModeProps) {
                   </div>
 
                   <div className="flex-1 flex flex-col items-center justify-center space-y-4">
-                    <h2 className="text-6xl font-bold text-foreground tracking-tight text-center">
+                    <h2 className="text-6xl font-medium text-foreground tracking-tight text-center">
                       {current.word}
                     </h2>
                   </div>
 
-                  <div className="flex items-center justify-center gap-2 text-xs text-muted-foreground">
-                    <RotateCcw className="size-3" />
-                    <span>Clique para ver o significado</span>
-                  </div>
+                  <Rotate3D className="minimal-rotate-hint size-4 text-muted-foreground" />
                 </div>
 
                 {/* Back */}
-                <div className="absolute inset-0 backface-hidden rotate-y-180 rounded-2xl border border-border bg-card p-8 flex flex-col shadow-sm overflow-hidden">
+                <div className="surface-card surface-card-elevated interactive-lift absolute inset-0 backface-hidden rotate-y-180 rounded-[26px] bg-card p-8 flex flex-col overflow-hidden">
                   <div className="flex items-center justify-between mb-4">
                     <div className="flex gap-2 items-center">
                       <Badge className={cn("text-xs font-medium border-0", partOfSpeechColors[current.partOfSpeech || "noun"])}>
                         {partOfSpeechLabels[current.partOfSpeech || "noun"]}
                       </Badge>
                       {current.verbType && (
-                        <Badge variant="outline" className="text-[10px] uppercase tracking-wider border-primary/30 text-primary">
+                        <Badge variant="outline" className="ghost-tag border-0 bg-primary/10 text-[10px] uppercase tracking-wider text-primary">
                           {current.verbType}
-                        </Badge>
-                      )}
-                      {current.falseCognate?.isFalseCognate && (
-                        <Badge className="text-[10px] uppercase tracking-wider bg-amber-500 hover:bg-amber-600 border-0 text-white font-bold">
-                          Falso Cognato
                         </Badge>
                       )}
                     </div>
@@ -422,9 +414,9 @@ export function StudyMode({ flashcards, folderName, onExit }: StudyModeProps) {
                   </div>
 
                   <div className="flex-1 space-y-6 overflow-y-auto pr-1 scrollbar-hide">
-                    <p className="text-4xl font-bold text-foreground border-b pb-2">{current.translation}</p>
+                    <p className="text-4xl font-medium text-foreground border-b border-border/50 pb-2">{current.translation}</p>
                     {includeUsageNote && !!current.usageNote && (
-                      <div className="bg-muted/30 border border-border/40 rounded-xl p-4">
+                      <div className="bg-muted/30 rounded-xl p-4">
                         <span className="text-xs font-bold text-muted-foreground uppercase tracking-widest">
                           Contexto
                         </span>
@@ -464,18 +456,6 @@ export function StudyMode({ flashcards, folderName, onExit }: StudyModeProps) {
                       )}
                     </div>
 
-                    {current.falseCognate?.isFalseCognate && (
-                      <div className="bg-amber-500/10 border border-amber-500/20 rounded-xl p-4 flex items-start gap-3">
-                        <AlertTriangle className="size-5 text-amber-600 shrink-0 mt-0.5" />
-                        <div>
-                          <p className="text-sm font-bold text-amber-800 dark:text-amber-400 uppercase tracking-tight">Falso Cognato</p>
-                          <p className="text-sm text-amber-700 dark:text-amber-200 mt-1">
-                            {current.falseCognate.warning}
-                          </p>
-                        </div>
-                      </div>
-                    )}
-
                     {alternativeForms.length > 0 && (
                       <div className="pt-4 border-t border-border">
                         <span className="text-[10px] font-bold text-muted-foreground dark:text-white/40 uppercase tracking-widest block mb-3">
@@ -483,13 +463,13 @@ export function StudyMode({ flashcards, folderName, onExit }: StudyModeProps) {
                         </span>
                         <div className="space-y-2">
                           {alternativeForms.map((form, idx) => (
-                            <div key={idx} className="bg-muted/20 rounded-xl p-3 border border-border/50">
+                            <div key={idx} className="bg-muted/20 rounded-xl p-3">
                               <div className="flex items-center gap-2 mb-1">
-                                <Badge className={cn("text-[9px] font-bold uppercase tracking-tighter border-0", partOfSpeechColors[form.partOfSpeech])}>
+                                <Badge className={cn("text-[9px] font-medium uppercase tracking-tighter border-0", partOfSpeechColors[form.partOfSpeech])}>
                                   {partOfSpeechLabels[form.partOfSpeech]}
                                 </Badge>
                                 <div className="flex flex-col leading-tight min-w-0">
-                                  <span className="text-sm font-bold text-foreground truncate">
+                                  <span className="text-sm font-medium text-foreground truncate">
                                     {(form as any).word || ""}
                                   </span>
                                   <span className="text-[11px] text-muted-foreground truncate">
@@ -556,32 +536,13 @@ export function StudyMode({ flashcards, folderName, onExit }: StudyModeProps) {
                     )}
                   </div>
 
-                  <div className="flex items-center justify-center gap-2 text-xs text-muted-foreground pt-4">
-                    <RotateCcw className="size-3" />
-                    <span>Clique para voltar</span>
-                  </div>
+                  <Rotate3D className="minimal-rotate-hint size-4 text-muted-foreground" />
                 </div>
               </div>
             </div>
 
-            {/* Hint para virar antes de responder */}
-            {!isFlipped && (
-              <p className={cn(
-                "text-center text-sm text-muted-foreground mt-6",
-                animationsEnabled && "animate-pulse"
-              )}>
-                Toque no card para ver o verso
-              </p>
-            )}
-
-            {/* Action buttons — aparecem so apos virar */}
-            <div
-              className={cn(
-                "flex gap-4 mt-8 transition-all",
-                animationsEnabled ? "duration-500" : "duration-0",
-                isFlipped ? "opacity-100 translate-y-0" : "opacity-0 translate-y-4 pointer-events-none"
-              )}
-            >
+            {/* Action buttons — always visible */}
+            <div className="flex gap-4 mt-8">
               <Button
                 size="lg"
                 variant="outline"

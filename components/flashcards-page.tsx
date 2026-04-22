@@ -1,18 +1,17 @@
 "use client"
 
-import { useState } from "react"
-import { BookOpen, Loader2, FolderPlus, Folder, FolderOpen, X, GraduationCap, TrendingUp, Target, Calendar, AlertTriangle, LayoutGrid, List, LayoutPanelTop, MoreVertical, Trash2 } from "lucide-react"
+import { useEffect, useState } from "react"
+import { BookOpen, Loader2, FolderPlus, Folder, FolderOpen, GraduationCap, TrendingUp, Target, Calendar, LayoutGrid, List, LayoutPanelTop, MoreVertical, Trash2, BookMarked, Pencil, Plus, BarChart2, X } from "lucide-react"
 import { useFlashcardsDB } from "@/hooks/use-flashcards-db"
 import { useGrammarProgress } from "@/hooks/use-grammar-progress"
-import { useApiKey } from "@/hooks/use-api-key"
 import { useGptModel } from "@/hooks/use-gpt-model"
 import { useAiPreferences } from "@/hooks/use-ai-preferences"
 import { AddFlashcardForm } from "./add-flashcard-form"
 import { FlashcardCard } from "./flashcard-card"
 import { StudyMode } from "./study-mode"
+import { WritingMode } from "./writing-mode"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
-import { Card, CardContent } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
 import {
   Dialog,
@@ -29,6 +28,12 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu"
 import {
+  Sheet,
+  SheetContent,
+  SheetHeader,
+  SheetTitle,
+} from "@/components/ui/sheet"
+import {
   AlertDialog,
   AlertDialogAction,
   AlertDialogCancel,
@@ -41,13 +46,14 @@ import {
 } from "@/components/ui/alert-dialog"
 import { cn } from "@/lib/utils"
 import { toast } from "@/hooks/use-toast"
-import { generateFlashcardData } from "@/lib/openai"
 import type { Flashcard } from "@/lib/types"
+import type { FlashcardAIResponse } from "@/lib/openai"
 
 export function FlashcardsPage() {
   const { 
     flashcards, 
     folders,
+    reviewFlashcards,
     selectedFolderId,
     setSelectedFolderId,
     isLoading, 
@@ -56,11 +62,12 @@ export function FlashcardsPage() {
     updateFlashcard,
     addFolder,
     deleteFolder,
+    addToReviewFolder,
+    removeFromReviewFolder,
   } = useFlashcardsDB()
   
-  const { getStudyStats, isLoaded: isProgressLoaded, dismissReviewWord } = useGrammarProgress()
+  const { getStudyStats, isLoaded: isProgressLoaded } = useGrammarProgress()
   const studyStats = getStudyStats()
-  const { apiKey, hasApiKey } = useApiKey()
   const { model } = useGptModel()
   const {
     synonymsLevel,
@@ -74,8 +81,25 @@ export function FlashcardsPage() {
   const [isDialogOpen, setIsDialogOpen] = useState(false)
   const [isCreatingFolder, setIsCreatingFolder] = useState(false)
   const [isStudying, setIsStudying] = useState(false)
+  const [isWritingMode, setIsWritingMode] = useState(false)
+  const [writingModeCards, setWritingModeCards] = useState<Flashcard[]>([])
+  const [isReviewStudy, setIsReviewStudy] = useState(false)
+  const [isReviewFolderSelected, setIsReviewFolderSelected] = useState(false)
+  const [showReviewStudySelector, setShowReviewStudySelector] = useState(false)
   const [studyCards, setStudyCards] = useState<Flashcard[] | null>(null)
   const [layout, setLayout] = useState<"grid" | "list" | "compact">("grid")
+  const [isAddOpen, setIsAddOpen] = useState(false)
+  const [isStatsOpen, setIsStatsOpen] = useState(false)
+
+  useEffect(() => {
+    if (isReviewFolderSelected && reviewFlashcards.length === 0) {
+      setIsWritingMode(false)
+      setIsReviewFolderSelected(false)
+      setIsReviewStudy(false)
+      setStudyCards(null)
+      setWritingModeCards([])
+    }
+  }, [isReviewFolderSelected, reviewFlashcards.length])
 
   const handleCreateFolder = async () => {
     if (!newFolderName.trim()) return
@@ -87,20 +111,12 @@ export function FlashcardsPage() {
   }
 
   const selectedFolder = folders.find(f => f.id === selectedFolderId)
-  const studyFolderName = selectedFolder?.name ?? "Todas as palavras"
+  const studyFolderName = isReviewFolderSelected ? "Revisão" : (selectedFolder?.name ?? "Todas as palavras")
   const effectiveStudyCards = studyCards ?? flashcards
+  const displayedFlashcards = isReviewFolderSelected ? reviewFlashcards : flashcards
   const visibleReviewWords = studyStats.wordsToReview
 
   const createCardFromAlternative = async (base: Flashcard, form: Flashcard["alternativeForms"][number]) => {
-    if (!hasApiKey || !apiKey) {
-      toast({
-        title: "API Key necessária",
-        description: "Configure sua chave do OpenRouter nas configurações para gerar novos cards.",
-        variant: "destructive",
-      })
-      return
-    }
-
     const inputWord = form.word || base.word
     const targetPartOfSpeech = form.partOfSpeech
 
@@ -110,14 +126,20 @@ export function FlashcardsPage() {
     })
 
     try {
-      const data = await generateFlashcardData(apiKey, inputWord, model, {
-        synonymsLevel,
-        includeConjugations,
-        includeAlternativeForms,
-        includeUsageNote,
-        efommMode,
-        targetPartOfSpeech,
+      const res = await fetch("/api/ai/flashcard", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          word: inputWord,
+          model,
+          options: { synonymsLevel, includeConjugations, includeAlternativeForms, includeUsageNote, efommMode, targetPartOfSpeech },
+        }),
       })
+      if (!res.ok) {
+        const json = await res.json().catch(() => ({}))
+        throw new Error(json?.error || "Erro ao gerar card")
+      }
+      const data: FlashcardAIResponse = await res.json()
 
       const flashcard: Flashcard = {
         id: crypto.randomUUID(),
@@ -163,363 +185,408 @@ export function FlashcardsPage() {
     }
   }
 
+  const handleAddWord = async (flashcard: Flashcard): Promise<boolean> => {
+    const ok = await addFlashcard(flashcard)
+    if (ok) setIsAddOpen(false)
+    return ok
+  }
+
+  if (isWritingMode) {
+    return (
+      <WritingMode
+        flashcards={writingModeCards}
+        onRemoveFromReview={removeFromReviewFolder}
+        onExit={() => {
+          setIsWritingMode(false)
+          setWritingModeCards([])
+          setIsReviewStudy(false)
+        }}
+      />
+    )
+  }
+
   if (isStudying && effectiveStudyCards.length > 0) {
     return (
       <StudyMode
         flashcards={effectiveStudyCards}
-        folderName={studyCards ? "Revisão" : studyFolderName}
+        folderName={isReviewStudy ? "Revisão" : studyFolderName}
+        onMarkForReview={isReviewStudy ? undefined : addToReviewFolder}
         onExit={() => {
           setIsStudying(false)
           setStudyCards(null)
+          setIsReviewStudy(false)
         }}
       />
     )
   }
 
   return (
-    <div className="max-w-6xl mx-auto space-y-8">
-      <div className="space-y-2 text-center">
-        <h1 className="text-3xl font-bold tracking-tight text-foreground">
-          Flashcards Dinâmicos
+    <div className="w-full">
+
+      {/* ── Hero Section ─────────────────────────────────────── */}
+      <div className="mb-10 flex flex-col items-center gap-5 pt-4">
+
+        {/* Brand watermark title */}
+        <h1 className="select-none text-[52px] font-light leading-none tracking-[-0.04em] text-foreground/20">
+          VocabLab
         </h1>
-        <p className="text-muted-foreground">
-          Adicione palavras em inglês e deixe a IA preencher automaticamente as
-          informações.
-        </p>
-      </div>
 
-      {/* Study Progress Stats */}
-      {isProgressLoaded && studyStats.totalSessions > 0 && (
-        <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-          <Card>
-            <CardContent className="pt-6">
-              <div className="flex items-center gap-3">
-                <div className="p-2 rounded-lg bg-primary/10">
-                  <Calendar className="size-5 text-primary" />
-                </div>
-                <div>
-                  <p className="text-2xl font-bold">{studyStats.totalSessions}</p>
-                  <p className="text-xs text-muted-foreground">Sessões</p>
-                </div>
-              </div>
-            </CardContent>
-          </Card>
-          <Card>
-            <CardContent className="pt-6">
-              <div className="flex items-center gap-3">
-                <div className="p-2 rounded-lg bg-primary/10">
-                  <GraduationCap className="size-5 text-primary" />
-                </div>
-                <div>
-                  <p className="text-2xl font-bold">{studyStats.totalCards}</p>
-                  <p className="text-xs text-muted-foreground">Cards estudados</p>
-                </div>
-              </div>
-            </CardContent>
-          </Card>
-          <Card>
-            <CardContent className="pt-6">
-              <div className="flex items-center gap-3">
-                <div className="p-2 rounded-lg bg-success/10">
-                  <Target className="size-5 text-success" />
-                </div>
-                <div>
-                  <p className="text-2xl font-bold">{studyStats.totalCorrectFirstTry}</p>
-                  <p className="text-xs text-muted-foreground">Acertos por tentativa</p>
-                </div>
-              </div>
-            </CardContent>
-          </Card>
-          <Card>
-            <CardContent className="pt-6">
-              <div className="flex items-center gap-3">
-                <div className="p-2 rounded-lg bg-accent/20">
-                  <TrendingUp className="size-5 text-accent-foreground" />
-                </div>
-                <div>
-                  <p className="text-2xl font-bold">{studyStats.averageAccuracy}%</p>
-                  <p className="text-xs text-muted-foreground">Precisão</p>
-                </div>
-              </div>
-            </CardContent>
-          </Card>
-        </div>
-      )}
-
-      {/* Words to review */}
-      {isProgressLoaded && visibleReviewWords.length > 0 && (
-        <Card className="bg-amber-500/5 border-amber-500/20">
-          <CardContent className="py-4">
-            <div className="flex items-start gap-3">
-              <div className="p-2 rounded-lg bg-amber-500/10">
-                <AlertTriangle className="size-5 text-amber-600" />
-              </div>
-              <div className="flex-1">
-                <p className="text-sm font-medium text-foreground mb-2">
-                  Palavras para revisar
-                </p>
-                <div className="flex flex-wrap gap-1.5">
-                  {visibleReviewWords
-                    .slice(0, 10)
-                    .map((word, idx) => (
-                      <DropdownMenu key={`${word}-${idx}`}>
-                        <DropdownMenuTrigger asChild>
-                          <Badge
-                            variant="secondary"
-                            className="cursor-pointer bg-amber-500/10 text-amber-700 dark:text-amber-300 hover:bg-amber-500/15"
-                            title="Clique para revisar agora ou pular"
-                          >
-                            {word}
-                          </Badge>
-                        </DropdownMenuTrigger>
-                        <DropdownMenuContent align="start">
-                          <DropdownMenuItem
-                            onSelect={(e) => {
-                              e.preventDefault()
-                              dismissReviewWord(word)
-                              const cards = flashcards.filter((c) => c.word.toLowerCase() === word.toLowerCase())
-                              if (cards.length > 0) {
-                                setStudyCards(cards)
-                                setIsStudying(true)
-                              }
-                            }}
-                          >
-                            Revisar agora
-                          </DropdownMenuItem>
-                          <DropdownMenuItem
-                            onSelect={(e) => {
-                              e.preventDefault()
-                              dismissReviewWord(word)
-                            }}
-                          >
-                            Pular
-                          </DropdownMenuItem>
-                        </DropdownMenuContent>
-                      </DropdownMenu>
-                    ))}
-                  {visibleReviewWords.length > 10 && (
-                    <Badge variant="secondary" className="bg-muted">
-                      +{visibleReviewWords.length - 10} mais
-                    </Badge>
-                  )}
-                </div>
-              </div>
-            </div>
-          </CardContent>
-        </Card>
-      )}
-
-      {/* Folders Section */}
-      <div className="flex flex-wrap items-center gap-2">
-        <Button
-          variant={selectedFolderId === null ? "default" : "outline"}
-          size="sm"
-          onClick={() => setSelectedFolderId(null)}
-          className="gap-2"
-        >
-          <FolderOpen className="size-4" />
-          Todas
-        </Button>
-
-        {folders.map((folder) => (
-          <div key={folder.id} className="relative group flex items-center -space-x-[1px]">
-            <Button
-              variant={selectedFolderId === folder.id ? "default" : "outline"}
-              size="sm"
-              onClick={() => setSelectedFolderId(folder.id)}
-              className={cn(
-                "gap-2 rounded-r-none border-r-0",
-                selectedFolderId === folder.id ? "z-10" : ""
-              )}
+        {/* Add-word toggle / input area */}
+        <div className="w-full max-w-lg">
+          {!isAddOpen ? (
+            <button
+              type="button"
+              onClick={() => setIsAddOpen(true)}
+              className="group mx-auto flex items-center gap-2 rounded-full border border-border/60 bg-transparent px-5 py-2 text-[13px] text-muted-foreground/70 transition-all duration-200 hover:border-border hover:bg-muted/20 hover:text-muted-foreground w-full justify-center"
             >
-              <Folder className="size-4" />
-              {folder.name}
-            </Button>
-            
-            <DropdownMenu>
-              <DropdownMenuTrigger asChild>
-                <Button
-                  variant={selectedFolderId === folder.id ? "default" : "outline"}
-                  size="icon-sm"
-                  className={cn(
-                    "rounded-l-none",
-                    selectedFolderId === folder.id ? "z-10" : ""
-                  )}
-                >
-                  <MoreVertical className="size-3" />
-                </Button>
-              </DropdownMenuTrigger>
-              <DropdownMenuContent align="end">
-                <AlertDialog>
-                  <AlertDialogTrigger asChild>
-                    <DropdownMenuItem 
-                      onSelect={(e) => e.preventDefault()}
-                      className="text-destructive focus:text-destructive gap-2"
-                    >
-                      <Trash2 className="size-4" />
-                      Excluir Pasta
-                    </DropdownMenuItem>
-                  </AlertDialogTrigger>
-                  <AlertDialogContent>
-                    <AlertDialogHeader>
-                      <AlertDialogTitle>Excluir Pasta?</AlertDialogTitle>
-                      <AlertDialogDescription>
-                        Isso excluirá permanentemente a pasta &ldquo;{folder.name}&rdquo;. 
-                        Os flashcards dentro dela não serão excluídos, mas ficarão sem pasta.
-                      </AlertDialogDescription>
-                    </AlertDialogHeader>
-                    <AlertDialogFooter>
-                      <AlertDialogCancel>Cancelar</AlertDialogCancel>
-                      <AlertDialogAction
-                        className="bg-destructive hover:bg-destructive/90"
-                        onClick={() => deleteFolder(folder.id)}
-                      >
-                        Excluir
-                      </AlertDialogAction>
-                    </AlertDialogFooter>
-                  </AlertDialogContent>
-                </AlertDialog>
-              </DropdownMenuContent>
-            </DropdownMenu>
-          </div>
-        ))}
-
-        <Dialog open={isDialogOpen} onOpenChange={setIsDialogOpen}>
-          <DialogTrigger asChild>
-            <Button variant="outline" size="sm" className="gap-2">
-              <FolderPlus className="size-4" />
-              Nova Pasta
-            </Button>
-          </DialogTrigger>
-          <DialogContent>
-            <DialogHeader>
-              <DialogTitle>Criar Nova Pasta</DialogTitle>
-              <DialogDescription>
-                Organize seus flashcards em pastas por tema ou nível.
-              </DialogDescription>
-            </DialogHeader>
-            <div className="flex gap-2 mt-4">
-              <Input
-                placeholder="Nome da pasta"
-                value={newFolderName}
-                onChange={(e) => setNewFolderName(e.target.value)}
-                onKeyDown={(e) => {
-                  if (e.key === "Enter") {
-                    handleCreateFolder()
-                  }
-                }}
-              />
-              <Button onClick={handleCreateFolder} disabled={isCreatingFolder || !newFolderName.trim()}>
-                {isCreatingFolder ? (
-                  <Loader2 className="size-4 animate-spin" />
-                ) : (
-                  "Criar"
-                )}
-              </Button>
+              <Plus className="size-3.5 stroke-[1.5]" />
+              Adicionar nova palavra
+            </button>
+          ) : (
+            <div className="animate-slide-down rounded-2xl border border-border/40 bg-card px-4 py-3 shadow-sm">
+              <AddFlashcardForm onAdd={handleAddWord} bare />
+              <button
+                type="button"
+                onClick={() => setIsAddOpen(false)}
+                className="mt-2 flex w-full items-center justify-center gap-1 text-[11px] text-muted-foreground/50 hover:text-muted-foreground transition-colors"
+              >
+                <X className="size-3" />
+                fechar
+              </button>
             </div>
-          </DialogContent>
-        </Dialog>
+          )}
+        </div>
       </div>
 
-      {/* Current folder indicator */}
-      {selectedFolder && (
-        <div className="flex items-center gap-2 text-sm text-muted-foreground bg-muted/50 rounded-lg px-4 py-2">
-          <Folder className="size-4" />
-          <span>Adicionando flashcards em:</span>
-          <span className="font-medium text-foreground">{selectedFolder.name}</span>
-        </div>
-      )}
+      {/* Control Bar */}
+      <div className="flex items-center gap-2">
 
-      <AddFlashcardForm onAdd={addFlashcard} />
+        {/* Left: folder segmented pill */}
+        <div className="segmented-control min-w-0 flex-1 overflow-x-auto">
+          <Button
+            variant="ghost"
+            size="sm"
+            onClick={() => { setSelectedFolderId(null); setIsReviewFolderSelected(false) }}
+            data-active={!isReviewFolderSelected && selectedFolderId === null}
+            className="ghost-filter h-8 gap-1.5 px-3 text-[13px]"
+          >
+            <FolderOpen className="size-3.5" />
+            Todas
+          </Button>
 
-      {isLoading ? (
-        <div className="flex items-center justify-center py-12">
-          <Loader2 className="size-8 animate-spin text-muted-foreground" />
+          {reviewFlashcards.length > 0 && (
+            <Button
+              variant="ghost"
+              size="sm"
+              onClick={() => { setIsReviewFolderSelected(true); setSelectedFolderId(null) }}
+              data-active={isReviewFolderSelected}
+              className="ghost-filter h-8 gap-1.5 px-3 text-[13px]"
+            >
+              <BookMarked className="size-3.5" />
+              Revisão
+              <Badge variant="secondary" className="ml-0.5 border-0 bg-muted px-1.5 py-0 text-[10px] font-medium text-muted-foreground shadow-none">
+                {reviewFlashcards.length}
+              </Badge>
+            </Button>
+          )}
+
+          {folders.map((folder) => (
+            <div key={folder.id} className="flex items-center gap-0.5">
+              <Button
+                variant="ghost"
+                size="sm"
+                onClick={() => { setSelectedFolderId(folder.id); setIsReviewFolderSelected(false) }}
+                data-active={!isReviewFolderSelected && selectedFolderId === folder.id}
+                className="ghost-filter h-8 gap-1.5 px-3 text-[13px]"
+              >
+                <Folder className="size-3.5" />
+                {folder.name}
+              </Button>
+
+              <DropdownMenu>
+                <DropdownMenuTrigger asChild>
+                  <Button
+                    variant="ghost"
+                    size="icon-sm"
+                    className="ghost-filter size-7 opacity-40 hover:opacity-100"
+                  >
+                    <MoreVertical className="size-3" />
+                  </Button>
+                </DropdownMenuTrigger>
+                <DropdownMenuContent align="end">
+                  <AlertDialog>
+                    <AlertDialogTrigger asChild>
+                      <DropdownMenuItem
+                        onSelect={(e) => e.preventDefault()}
+                        className="text-destructive focus:text-destructive gap-2"
+                      >
+                        <Trash2 className="size-4" />
+                        Excluir Pasta
+                      </DropdownMenuItem>
+                    </AlertDialogTrigger>
+                    <AlertDialogContent>
+                      <AlertDialogHeader>
+                        <AlertDialogTitle>Excluir Pasta?</AlertDialogTitle>
+                        <AlertDialogDescription>
+                          Isso excluirá permanentemente a pasta &ldquo;{folder.name}&rdquo;.
+                          Os flashcards dentro dela não serão excluídos, mas ficarão sem pasta.
+                        </AlertDialogDescription>
+                      </AlertDialogHeader>
+                      <AlertDialogFooter>
+                        <AlertDialogCancel>Cancelar</AlertDialogCancel>
+                        <AlertDialogAction
+                          className="bg-destructive hover:bg-destructive/90"
+                          onClick={() => deleteFolder(folder.id)}
+                        >
+                          Excluir
+                        </AlertDialogAction>
+                      </AlertDialogFooter>
+                    </AlertDialogContent>
+                  </AlertDialog>
+                </DropdownMenuContent>
+              </DropdownMenu>
+            </div>
+          ))}
+
+          {/* Nova Pasta icon — end of pill */}
+          <Dialog open={isDialogOpen} onOpenChange={setIsDialogOpen}>
+            <DialogTrigger asChild>
+              <Button variant="ghost" size="icon-sm" title="Nova Pasta" className="ghost-filter ml-1 size-7 opacity-60 hover:opacity-100">
+                <FolderPlus className="size-3.5" />
+              </Button>
+            </DialogTrigger>
+            <DialogContent>
+              <DialogHeader>
+                <DialogTitle>Criar Nova Pasta</DialogTitle>
+                <DialogDescription>Organize seus flashcards em pastas por tema ou nível.</DialogDescription>
+              </DialogHeader>
+              <div className="flex gap-2 mt-4">
+                <Input
+                  placeholder="Nome da pasta"
+                  value={newFolderName}
+                  onChange={(e) => setNewFolderName(e.target.value)}
+                  onKeyDown={(e) => { if (e.key === "Enter") handleCreateFolder() }}
+                />
+                <Button onClick={handleCreateFolder} disabled={isCreatingFolder || !newFolderName.trim()}>
+                  {isCreatingFolder ? <Loader2 className="size-4 animate-spin" /> : "Criar"}
+                </Button>
+              </div>
+            </DialogContent>
+          </Dialog>
         </div>
-      ) : flashcards.length === 0 ? (
-        <div className="flex flex-col items-center justify-center py-16 text-center">
-          <div className="size-16 rounded-full bg-muted flex items-center justify-center mb-4">
-            <BookOpen className="size-8 text-muted-foreground" />
+
+        {/* Right: action cluster */}
+        <div className="flex shrink-0 items-center gap-1.5">
+          <Button
+            variant="ghost"
+            size="icon-sm"
+            title="Ver Progresso"
+            onClick={() => setIsStatsOpen(true)}
+            className="ghost-filter size-8"
+          >
+            <BarChart2 className="size-3.5" />
+          </Button>
+
+          {!isLoading && displayedFlashcards.length > 0 && (
+            isReviewFolderSelected ? (
+              <Dialog open={showReviewStudySelector} onOpenChange={setShowReviewStudySelector}>
+                <DialogTrigger asChild>
+                  <Button size="sm" variant="outline" className="h-8 gap-1.5 rounded-full px-3 text-[13px]">
+                    <GraduationCap className="size-3.5" />
+                    Estudar revisão
+                  </Button>
+                </DialogTrigger>
+                <DialogContent className="sm:max-w-sm">
+                  <DialogHeader>
+                    <DialogTitle>Escolha o modo de estudo</DialogTitle>
+                    <DialogDescription>Como você quer revisar suas {reviewFlashcards.length} palavras pendentes?</DialogDescription>
+                  </DialogHeader>
+                  <div className="grid gap-3 pt-2">
+                    <Button
+                      variant="outline"
+                      className="h-20 flex-col gap-2 text-left items-start px-5"
+                      onClick={() => {
+                        setShowReviewStudySelector(false)
+                        setStudyCards(reviewFlashcards)
+                        setIsReviewStudy(true)
+                        setIsStudying(true)
+                      }}
+                    >
+                      <div className="flex items-center gap-2 font-semibold">
+                        <BookOpen className="size-4 text-primary" />
+                        Flashcards
+                      </div>
+                      <p className="text-xs text-muted-foreground font-normal">Modo clássico com flip de cartão</p>
+                    </Button>
+                    <Button
+                      variant="outline"
+                      className="h-20 flex-col gap-2 text-left items-start px-5"
+                      onClick={() => {
+                        setShowReviewStudySelector(false)
+                        setIsReviewStudy(true)
+                        setWritingModeCards([...reviewFlashcards])
+                        setIsWritingMode(true)
+                      }}
+                    >
+                      <div className="flex items-center gap-2 font-semibold">
+                        <Pencil className="size-4 text-primary" />
+                        Escrita Obrigatória
+                      </div>
+                      <p className="text-xs text-muted-foreground font-normal">Digite o termo correto em inglês para avançar</p>
+                    </Button>
+                  </div>
+                </DialogContent>
+              </Dialog>
+            ) : (
+              <Button
+                size="sm"
+                variant="outline"
+                onClick={() => setIsStudying(true)}
+                className="h-8 gap-1.5 rounded-full px-3 text-[13px]"
+              >
+                <GraduationCap className="size-3.5" />
+                Estudar{selectedFolder ? ` "${selectedFolder.name}"` : " tudo"}
+              </Button>
+            )
+          )}
+        </div>
+      </div>
+
+      {/* ── Stats Sheet ──────────────────────────────────────── */}
+      <Sheet open={isStatsOpen} onOpenChange={setIsStatsOpen}>
+        <SheetContent side="right" className="w-72 sm:w-80 p-0">
+          <SheetHeader className="border-b border-border/50 px-5 pb-4 pt-5">
+            <SheetTitle className="flex items-center gap-2 text-[15px]">
+              <BarChart2 className="size-4 text-primary" />
+              Progresso de Estudo
+            </SheetTitle>
+          </SheetHeader>
+          <div className="p-5">
+            {isProgressLoaded && studyStats.totalSessions > 0 ? (
+              <div className="grid grid-cols-2 gap-3">
+                {[
+                  { icon: Calendar, label: "Sessões", value: studyStats.totalSessions, tone: "text-primary/70" },
+                  { icon: GraduationCap, label: "Cards estudados", value: studyStats.totalCards, tone: "text-primary/70" },
+                  { icon: Target, label: "Acertos na 1ª", value: studyStats.totalCorrectFirstTry, tone: "text-success/70" },
+                  { icon: TrendingUp, label: "Precisão", value: `${studyStats.averageAccuracy}%`, tone: "text-primary/70" },
+                ].map((stat) => (
+                  <div key={stat.label} className="stat-bento flex-col items-start gap-2">
+                    <div className="flex size-7 items-center justify-center rounded-md bg-primary/10">
+                      <stat.icon className={cn("size-3.5", stat.tone)} />
+                    </div>
+                    <div>
+                      <p className="text-2xl font-bold leading-none tracking-[-0.03em]">{stat.value}</p>
+                      <p className="mt-1 text-[10px] uppercase tracking-[0.07em] text-muted-foreground">{stat.label}</p>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            ) : (
+              <div className="flex flex-col items-center justify-center py-12 text-center">
+                <div className="mb-3 flex size-12 items-center justify-center rounded-full bg-muted">
+                  <BarChart2 className="size-6 text-muted-foreground" />
+                </div>
+                <p className="text-sm text-muted-foreground">Nenhuma sessão registrada ainda. Estude alguns flashcards para ver seu progresso aqui.</p>
+              </div>
+            )}
           </div>
-          <h3 className="font-semibold text-lg text-foreground mb-1">
-            {selectedFolderId ? "Nenhum flashcard nesta pasta" : "Nenhum flashcard ainda"}
-          </h3>
-          <p className="text-sm text-muted-foreground max-w-sm">
-            {selectedFolderId 
-              ? "Adicione sua primeira palavra nesta pasta usando o campo acima."
-              : "Comece adicionando sua primeira palavra em inglês no campo acima."}
-          </p>
-        </div>
-      ) : (
-        <div className="space-y-4">
-          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
-            <div className="flex items-center gap-4">
-              <p className="text-sm text-muted-foreground">
-                {flashcards.length}{" "}
-                {flashcards.length === 1 ? "palavra" : "palavras"}
-                {selectedFolder ? ` em "${selectedFolder.name}"` : " no vocabulário"}
+        </SheetContent>
+      </Sheet>
+
+      {/* ── Cards ────────────────────────────────────────────── */}
+      <div className="mt-8">
+        {isLoading ? (
+          <div className="flex items-center justify-center py-12">
+            <Loader2 className="size-8 animate-spin text-muted-foreground" />
+          </div>
+        ) : displayedFlashcards.length === 0 ? (
+          <div className="flex flex-col items-center justify-center py-16 text-center">
+            <div className="size-16 rounded-full bg-muted flex items-center justify-center mb-4">
+              <BookOpen className="size-8 text-muted-foreground" />
+            </div>
+            <h3 className="font-semibold text-lg text-foreground mb-1">
+              {isReviewFolderSelected
+                ? "Nenhuma palavra para revisar"
+                : selectedFolderId
+                ? "Nenhum flashcard nesta pasta"
+                : "Nenhum flashcard ainda"}
+            </h3>
+            <p className="text-sm text-muted-foreground max-w-sm">
+              {isReviewFolderSelected
+                ? "Ótimo! Você não tem palavras pendentes de revisão."
+                : selectedFolderId
+                ? 'Clique em "+ Nova Palavra" para adicionar sua primeira palavra nesta pasta.'
+                : 'Clique em "+ Nova Palavra" para começar a construir seu vocabulário.'}
+            </p>
+          </div>
+        ) : (
+          <div className="space-y-4">
+            <div className="flex items-center gap-3">
+              <p className="text-[12px] text-muted-foreground/70">
+                {displayedFlashcards.length}{" "}
+                {displayedFlashcards.length === 1 ? "palavra" : "palavras"}
+                {isReviewFolderSelected
+                  ? " para revisar"
+                  : selectedFolder
+                  ? ` em "${selectedFolder.name}"`
+                  : " no vocabulário"}
               </p>
-              
-              <div className="flex items-center bg-muted rounded-lg p-1">
+              <div className="flex items-center rounded-lg bg-muted/30 p-0.5">
                 <Button
-                  variant={layout === "grid" ? "secondary" : "ghost"}
+                  variant="ghost"
                   size="icon"
-                  className="size-8"
+                  data-active={layout === "grid"}
+                  className="ghost-filter size-7"
                   onClick={() => setLayout("grid")}
                   title="Cards"
                 >
-                  <LayoutGrid className="size-4" />
+                  <LayoutGrid className="size-3.5" />
                 </Button>
                 <Button
-                  variant={layout === "list" ? "secondary" : "ghost"}
+                  variant="ghost"
                   size="icon"
-                  className="size-8"
+                  data-active={layout === "list"}
+                  className="ghost-filter size-7"
                   onClick={() => setLayout("list")}
                   title="Lista"
                 >
-                  <List className="size-4" />
+                  <List className="size-3.5" />
                 </Button>
                 <Button
-                  variant={layout === "compact" ? "secondary" : "ghost"}
+                  variant="ghost"
                   size="icon"
-                  className="size-8"
+                  data-active={layout === "compact"}
+                  className="ghost-filter size-7"
                   onClick={() => setLayout("compact")}
                   title="Compacto"
                 >
-                  <LayoutPanelTop className="size-4" />
+                  <LayoutPanelTop className="size-3.5" />
                 </Button>
               </div>
             </div>
 
-            <Button
-              onClick={() => setIsStudying(true)}
-              className="gap-2"
-              size="sm"
-            >
-              <GraduationCap className="size-4" />
-              Estudar{selectedFolder ? ` "${selectedFolder.name}"` : " tudo"}
-            </Button>
+            {/* key={layout} resets card flip state on layout change */}
+            <div key={layout} className={cn(
+              "grid gap-4",
+              layout === "grid" && "sm:grid-cols-2 lg:grid-cols-3",
+              layout === "list" && "grid-cols-1",
+              layout === "compact" && "grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5"
+            )}>
+              {displayedFlashcards.map((flashcard) => (
+                <FlashcardCard
+                  key={flashcard.id}
+                  flashcard={flashcard}
+                  onDelete={deleteFlashcard}
+                  onCreateFromAlternative={createCardFromAlternative}
+                  onUpdateFlashcard={updateFlashcard}
+                  layout={layout}
+                />
+              ))}
+            </div>
           </div>
-
-          <div className={cn(
-            "grid gap-4",
-            layout === "grid" && "sm:grid-cols-2 lg:grid-cols-3",
-            layout === "list" && "grid-cols-1",
-            layout === "compact" && "grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5"
-          )}>
-            {flashcards.map((flashcard) => (
-              <FlashcardCard
-                key={flashcard.id}
-                flashcard={flashcard}
-                onDelete={deleteFlashcard}
-                onCreateFromAlternative={createCardFromAlternative}
-                onUpdateFlashcard={updateFlashcard}
-                layout={layout}
-              />
-            ))}
-          </div>
-        </div>
-      )}
+        )}
+      </div>
     </div>
   )
 }
+

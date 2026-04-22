@@ -1,7 +1,7 @@
 "use client"
 
 import { useEffect, useMemo, useState } from "react"
-import { Settings, Eye, EyeOff, Key, Check, Trash2, RotateCcw, BarChart3, Sun, Moon, Laptop, BrainCircuit, Sparkles, CloudUpload, CloudDownload, RefreshCcw, Loader2 } from "lucide-react"
+import { Settings, RotateCcw, BarChart3, Sun, Moon, Laptop, Sparkles, CloudUpload, CloudDownload, RefreshCcw, Loader2 } from "lucide-react"
 import { useTheme } from "next-themes"
 import { Button } from "@/components/ui/button"
 import { Switch } from "@/components/ui/switch"
@@ -25,17 +25,8 @@ import {
   AlertDialogTitle,
   AlertDialogTrigger,
 } from "@/components/ui/alert-dialog"
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select"
 import { Input } from "@/components/ui/input"
-import { useApiKey } from "@/hooks/use-api-key"
 import { useGrammarProgress } from "@/hooks/use-grammar-progress"
-import { useGptModel, type GptModel } from "@/hooks/use-gpt-model"
 import { useAnimations } from "@/hooks/use-animations"
 import { useAiPreferences } from "@/hooks/use-ai-preferences"
 import { useSyncCode } from "@/hooks/use-sync-code"
@@ -43,16 +34,13 @@ import { useFlashcardsDB } from "@/hooks/use-flashcards-db"
 import { toast } from "@/hooks/use-toast"
 import { cn } from "@/lib/utils"
 
-type SettingsSection = "ai" | "content"
 type ColorPalette = "blue" | "beige" | "violet"
 
 const COLOR_PALETTE_KEY = "vocablab_color_palette"
 
 export function SettingsDialog() {
-  const { apiKey, setApiKey, clearApiKey, hasApiKey } = useApiKey()
   const { resetStats } = useGrammarProgress()
   const { theme, setTheme } = useTheme()
-  const { model, setModel } = useGptModel()
   const { enabled: animationsEnabled, setEnabled: setAnimationsEnabled } = useAnimations()
   const {
     synonymsLevel,
@@ -68,10 +56,6 @@ export function SettingsDialog() {
   } = useAiPreferences()
   const { syncCode, setSyncCode, regenerate, isValid: isSyncCodeValid } = useSyncCode()
   const { allFlashcards, folders, importAllData } = useFlashcardsDB()
-  const [inputValue, setInputValue] = useState("")
-  const [showKey, setShowKey] = useState(false)
-  const [saved, setSaved] = useState(false)
-  const [section, setSection] = useState<SettingsSection>("ai")
   const [palette, setPalette] = useState<ColorPalette>("blue")
   const [syncBusy, setSyncBusy] = useState<"push" | "pull" | null>(null)
 
@@ -93,22 +77,6 @@ export function SettingsDialog() {
     root.classList.add(`palette-${palette}`)
     localStorage.setItem(COLOR_PALETTE_KEY, palette)
   }, [palette])
-
-  const handleSave = () => {
-    if (inputValue.trim()) {
-      setApiKey(inputValue.trim())
-      setInputValue("")
-      setSaved(true)
-      setTimeout(() => setSaved(false), 2000)
-    }
-  }
-
-  const handleClear = () => {
-    clearApiKey()
-    setInputValue("")
-  }
-
-  const maskedKey = apiKey ? `sk-...${apiKey.slice(-8)}` : ""
 
   const pushToCloud = async () => {
     if (!isSyncCodeValid) {
@@ -220,38 +188,26 @@ export function SettingsDialog() {
   return (
     <Dialog>
       <DialogTrigger asChild>
-        <Button variant="ghost" size="icon" className="relative">
+        <Button variant="ghost" size="icon" className="relative rounded-full hover:bg-background/70 hover:shadow-sm">
           <Settings className="size-5" />
-          {!hasApiKey && (
-            <span className="absolute -top-1 -right-1 size-2 rounded-full bg-destructive" />
-          )}
           <span className="sr-only">Configurações</span>
         </Button>
       </DialogTrigger>
       <DialogContent className="sm:max-w-2xl p-0 overflow-hidden">
           <DialogHeader className="p-5">
           <DialogTitle className="flex items-center gap-2">
-            <Key className="size-5 text-primary" />
+            <Settings className="size-5 text-primary" />
             Configurações
           </DialogTitle>
           <DialogDescription>
-            Configure sua chave de API do OpenRouter e preferências do app.
+            Preferências do app. A chave de API é configurada via .env.local no servidor.
           </DialogDescription>
         </DialogHeader>
         <div className="border-t flex flex-col sm:flex-row">
           <div className="sm:w-44 border-b sm:border-b-0 sm:border-r p-2 bg-muted/30">
             <Button
               variant="ghost"
-              className={cn("w-full justify-start gap-2", section === "ai" && "bg-background shadow-sm")}
-              onClick={() => setSection("ai")}
-            >
-              <BrainCircuit className="size-4 text-primary" />
-              IA e Chave
-            </Button>
-            <Button
-              variant="ghost"
-              className={cn("w-full justify-start gap-2 mt-1", section === "content" && "bg-background shadow-sm")}
-              onClick={() => setSection("content")}
+              className="w-full justify-start gap-2 bg-background shadow-sm"
             >
               <Sparkles className="size-4 text-primary" />
               Conteúdo
@@ -259,129 +215,7 @@ export function SettingsDialog() {
           </div>
 
           <div className="flex-1 p-5 max-h-[70vh] overflow-y-auto">
-            {section === "ai" ? (
-              <div className="space-y-6">
-                <div className="space-y-3">
-                  <h4 className="text-sm font-medium flex items-center gap-2">
-                    <BrainCircuit className="size-4 text-primary" />
-                    Modelo de Inteligência Artificial
-                  </h4>
-                      <Select value={model} onValueChange={(v) => setModel(v as GptModel)}>
-                    <SelectTrigger className="w-full">
-                      <SelectValue placeholder="Selecione o modelo" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="openai/gpt-4o-mini">GPT-4o Mini (Rápido & Econômico)</SelectItem>
-                      <SelectItem value="openai/gpt-5.4-mini">GPT-5.4 Mini (Próxima Geração)</SelectItem>
-                      <SelectItem value="openai/gpt-5.4-nano">GPT-5.4 Nano (Próxima Geração)</SelectItem>
-                    </SelectContent>
-                  </Select>
-                  <p className="text-[10px] text-muted-foreground">
-                    O modelo selecionado será usado para gerar flashcards e exercícios.
-                  </p>
-                </div>
-
-                <div className="space-y-3 pt-4 border-t">
-                  <div className="flex items-center justify-between">
-                    <div className="space-y-0.5">
-                      <h4 className="text-sm font-medium flex items-center gap-2">
-                        <Sparkles className="size-4 text-primary" />
-                        Modo EFOMM (Marítimo)
-                      </h4>
-                      <p className="text-[10px] text-muted-foreground">
-                        Quando a palavra permitir, a IA prioriza significados e exemplos em contexto naval/porto/logística.
-                      </p>
-                    </div>
-                    <Switch checked={efommMode} onCheckedChange={setEfommMode} />
-                  </div>
-                </div>
-
-                <div className="space-y-3 pt-4 border-t">
-                  <h4 className="text-sm font-medium flex items-center gap-2">
-                      <Key className="size-4 text-primary" />
-                      OpenRouter API Key
-                    </h4>
-                  {hasApiKey ? (
-                    <div className="space-y-3">
-                      <div className="flex items-start gap-2 rounded-lg border bg-muted/50 p-3 min-h-[60px]">
-                        <Key className="size-4 text-muted-foreground mt-1 shrink-0" />
-                        <span className="flex-1 font-mono text-xs break-all leading-relaxed">
-                          {showKey ? apiKey : maskedKey}
-                        </span>
-                        <Button
-                          variant="ghost"
-                          size="icon"
-                          className="size-8 shrink-0"
-                          onClick={() => setShowKey(!showKey)}
-                        >
-                          {showKey ? (
-                            <EyeOff className="size-4" />
-                          ) : (
-                            <Eye className="size-4" />
-                          )}
-                        </Button>
-                      </div>
-
-                      <div className="flex gap-2">
-                        <Button
-                          variant="destructive"
-                          className="flex-1"
-                          onClick={handleClear}
-                        >
-                          <Trash2 className="size-4 mr-2" />
-                          Remover chave
-                        </Button>
-                      </div>
-
-                      <p className="text-xs text-muted-foreground text-center">
-                        Sua chave está salva localmente no navegador.
-                      </p>
-                    </div>
-                  ) : (
-                    <div className="space-y-3">
-                      <div className="flex gap-2">
-                        <Input
-                          type={showKey ? "text" : "password"}
-                          placeholder="sk-..."
-                          value={inputValue}
-                          onChange={(e) => setInputValue(e.target.value)}
-                          className="flex-1 font-mono"
-                        />
-                        <Button
-                          variant="ghost"
-                          size="icon"
-                          className="size-9"
-                          onClick={() => setShowKey(!showKey)}
-                        >
-                          {showKey ? (
-                            <EyeOff className="size-4" />
-                          ) : (
-                            <Eye className="size-4" />
-                          )}
-                        </Button>
-                      </div>
-                      <Button
-                        className="w-full"
-                        onClick={handleSave}
-                        disabled={!inputValue.trim() || saved}
-                      >
-                        {saved ? (
-                          <>
-                            <Check className="size-4 mr-2" />
-                            Salvo!
-                          </>
-                        ) : (
-                          <>
-                            <Key className="size-4 mr-2" />
-                            Salvar chave
-                          </>
-                        )}
-                      </Button>
-                    </div>
-                  )}
-                </div>
-              </div>
-            ) : (
+            <div className="space-y-6">
               <div className="space-y-6">
                 <div className="space-y-3">
                   <h4 className="text-sm font-medium flex items-center gap-2">
@@ -526,7 +360,15 @@ export function SettingsDialog() {
                     </div>
                     <Switch checked={includeUsageNote} onCheckedChange={setIncludeUsageNote} />
                   </div>
-                </div>
+                  <div className="flex items-center justify-between pt-1">
+                    <div className="space-y-0.5">
+                      <Label className="text-sm">Modo EFOMM (Marítimo)</Label>
+                      <p className="text-[10px] text-muted-foreground">
+                        Quando a palavra permitir, a IA prioriza significados e exemplos em contexto naval/porto/logística.
+                      </p>
+                    </div>
+                    <Switch checked={efommMode} onCheckedChange={setEfommMode} />
+                  </div>                </div>
 
                 <div className="space-y-3 pt-4 border-t">
                   <h4 className="text-sm font-medium flex items-center gap-2">
@@ -641,7 +483,7 @@ export function SettingsDialog() {
                   </p>
                 </div>
               </div>
-            )}
+            </div>
           </div>
         </div>
       </DialogContent>

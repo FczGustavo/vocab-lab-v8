@@ -1,18 +1,17 @@
 "use client"
 
 import { useEffect, useState } from "react"
-import { Trash2, RotateCcw, Volume2, AlertTriangle, Pencil, Loader2, Languages } from "lucide-react"
+import { Trash2, Volume2, Pencil, Loader2, Languages, Rotate3D } from "lucide-react"
 import { cn } from "@/lib/utils"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
 import { Card } from "@/components/ui/card"
 import type { Flashcard, ClassifiedWord, PartOfSpeech, AlternativeForm } from "@/lib/types"
+import type { FlashcardRevisionResponse } from "@/lib/openai"
 import { useAnimations } from "@/hooks/use-animations"
 import { useAiPreferences } from "@/hooks/use-ai-preferences"
-import { useApiKey } from "@/hooks/use-api-key"
 import { useGptModel } from "@/hooks/use-gpt-model"
 import { toast } from "@/hooks/use-toast"
-import { reviseFlashcardByTranslation } from "@/lib/openai"
 import {
   Dialog,
   DialogContent,
@@ -44,15 +43,15 @@ const partOfSpeechLabels: Record<PartOfSpeech, string> = {
 }
 
 const partOfSpeechColors: Record<PartOfSpeech, string> = {
-  verb: "bg-blue-500/15 text-blue-700 dark:text-blue-400",
-  noun: "bg-emerald-500/15 text-emerald-700 dark:text-emerald-400",
-  adjective: "bg-amber-500/15 text-amber-700 dark:text-amber-400",
-  adverb: "bg-purple-500/15 text-purple-700 dark:text-purple-400",
-  preposition: "bg-rose-500/15 text-rose-700 dark:text-rose-400",
-  conjunction: "bg-cyan-500/15 text-cyan-700 dark:text-cyan-400",
-  interjection: "bg-orange-500/15 text-orange-700 dark:text-orange-400",
-  phrase: "bg-teal-500/15 text-teal-700 dark:text-teal-400",
-  acronym: "bg-indigo-500/15 text-indigo-700 dark:text-indigo-400",
+  verb: "ghost-tag bg-blue-500/10 text-blue-700 dark:bg-blue-400/10 dark:text-blue-300",
+  noun: "ghost-tag bg-emerald-500/10 text-emerald-700 dark:bg-emerald-400/10 dark:text-emerald-300",
+  adjective: "ghost-tag bg-amber-500/10 text-amber-700 dark:bg-amber-400/10 dark:text-amber-300",
+  adverb: "ghost-tag bg-purple-500/10 text-purple-700 dark:bg-purple-400/10 dark:text-purple-300",
+  preposition: "ghost-tag bg-rose-500/10 text-rose-700 dark:bg-rose-400/10 dark:text-rose-300",
+  conjunction: "ghost-tag bg-cyan-500/10 text-cyan-700 dark:bg-cyan-400/10 dark:text-cyan-300",
+  interjection: "ghost-tag bg-orange-500/10 text-orange-700 dark:bg-orange-400/10 dark:text-orange-300",
+  phrase: "ghost-tag bg-teal-500/10 text-teal-700 dark:bg-teal-400/10 dark:text-teal-300",
+  acronym: "ghost-tag bg-indigo-500/10 text-indigo-700 dark:bg-indigo-400/10 dark:text-indigo-300",
 }
 
 function ClassifiedWordList({ 
@@ -90,7 +89,7 @@ function ClassifiedWordList({
             <Badge
               key={idx}
               variant="outline"
-              className={cn("text-[10px] font-medium py-0 px-2 h-5 border-0", tone)}
+              className={cn("ghost-tag text-[10px] font-medium py-0 px-2 h-5 border-0", tone)}
             >
               {item.word}
               <span className="ml-1 opacity-50 text-[8px] font-normal">
@@ -113,7 +112,6 @@ export function FlashcardCard({ flashcard, onDelete, onCreateFromAlternative, on
   const [editBusy, setEditBusy] = useState(false)
   const { enabled: animationsEnabled } = useAnimations()
   const { synonymsLevel, includeConjugations, includeAlternativeForms, includeUsageNote, efommMode } = useAiPreferences()
-  const { apiKey, hasApiKey } = useApiKey()
   const { model } = useGptModel()
 
   const speak = (text: string) => {
@@ -138,14 +136,6 @@ export function FlashcardCard({ flashcard, onDelete, onCreateFromAlternative, on
   const submitTranslationEdit = async () => {
     const nextTranslation = translationDraft.trim()
     if (!nextTranslation) return
-    if (!hasApiKey || !apiKey) {
-      toast({
-        title: "API Key necessária",
-        description: "Configure sua chave do OpenRouter nas configurações.",
-        variant: "destructive",
-      })
-      return
-    }
     if (!onUpdateFlashcard) {
       toast({
         title: "Não foi possível salvar",
@@ -162,19 +152,27 @@ export function FlashcardCard({ flashcard, onDelete, onCreateFromAlternative, on
     })
 
     try {
-      const revised = await reviseFlashcardByTranslation(
-        apiKey,
-        {
-          word: flashcard.word,
-          partOfSpeech: flashcard.partOfSpeech,
-          translation: nextTranslation,
-          efommMode,
-          synonymsLevel,
-          includeAlternativeForms,
-          includeUsageNote,
-        },
-        model
-      )
+      const res = await fetch("/api/ai/revise", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          model,
+          input: {
+            word: flashcard.word,
+            partOfSpeech: flashcard.partOfSpeech,
+            translation: nextTranslation,
+            efommMode,
+            synonymsLevel,
+            includeAlternativeForms,
+            includeUsageNote,
+          },
+        }),
+      })
+      if (!res.ok) {
+        const json = await res.json().catch(() => ({}))
+        throw new Error(json?.error || "Erro ao revisar card")
+      }
+      const revised: FlashcardRevisionResponse = await res.json()
 
       const updated: Flashcard = {
         ...flashcard,
@@ -212,9 +210,9 @@ export function FlashcardCard({ flashcard, onDelete, onCreateFromAlternative, on
   // List Layout
   if (layout === "list") {
     return (
-      <Card className="flex flex-col sm:flex-row sm:items-center justify-between p-4 gap-4 hover:shadow-md transition-shadow">
+      <Card className="surface-card surface-card-elevated interactive-lift flex flex-col justify-between gap-4 p-4 sm:flex-row sm:items-center">
         <div className="flex flex-col min-w-0 flex-1">
-          <h3 className="text-lg font-bold text-foreground leading-tight truncate">
+          <h3 className="text-lg font-medium text-foreground leading-tight truncate">
             {flashcard.word}
           </h3>
           <div className="flex items-center gap-2 min-w-0">
@@ -237,18 +235,13 @@ export function FlashcardCard({ flashcard, onDelete, onCreateFromAlternative, on
           <div className="flex flex-wrap justify-end items-center gap-2">
             <Badge
               variant="outline"
-              className={cn("text-[10px] h-5", partOfSpeechColors[partOfSpeech])}
+              className={cn("text-[10px] h-5 border-0", partOfSpeechColors[partOfSpeech])}
             >
               {partOfSpeechLabels[partOfSpeech]}
             </Badge>
             {flashcard.verbType && (
-              <Badge variant="outline" className="text-[9px] uppercase tracking-wider border-primary/30 text-primary h-5">
+              <Badge variant="outline" className="ghost-tag h-5 bg-primary/10 text-[9px] uppercase tracking-wider text-primary border-0">
                 {flashcard.verbType}
-              </Badge>
-            )}
-            {flashcard.falseCognate?.isFalseCognate && (
-              <Badge className="text-[9px] px-1.5 h-4 bg-amber-500 hover:bg-amber-600 border-0 text-white font-bold uppercase tracking-tighter">
-                Falso Cognato
               </Badge>
             )}
           </div>
@@ -268,7 +261,7 @@ export function FlashcardCard({ flashcard, onDelete, onCreateFromAlternative, on
             className="size-8"
             onClick={() => setIsFlipped(!isFlipped)}
           >
-            <RotateCcw className={cn("size-4 transition-transform", isFlipped && "rotate-180")} />
+            <Rotate3D className={cn("size-4 transition-transform", isFlipped && "rotate-180")} />
           </Button>
           {onDelete && (
             <Button
@@ -346,26 +339,21 @@ export function FlashcardCard({ flashcard, onDelete, onCreateFromAlternative, on
   // Compact Layout
   if (layout === "compact") {
     return (
-      <Card className="group relative overflow-hidden min-h-24 h-28 hover:shadow-md transition-shadow cursor-pointer" onClick={() => setIsFlipped(!isFlipped)}>
+      <Card className="surface-card surface-card-elevated interactive-lift group relative h-28 min-h-24 cursor-pointer overflow-hidden" onClick={() => setIsFlipped(!isFlipped)}>
         <div className={cn(
           "absolute inset-0 p-3 flex flex-col justify-between transition-all",
           animationsEnabled ? "duration-300" : "duration-0",
           isFlipped ? "opacity-0 translate-y-[-100%]" : "opacity-100 translate-y-0"
         )}>
           <div className="flex justify-between items-start gap-1">
-            <h3 className="font-bold text-base truncate pr-1 flex-1 leading-snug text-center">{flashcard.word}</h3>
+            <h3 className="flex-1 truncate pr-1 text-center text-base font-medium leading-snug">{flashcard.word}</h3>
             <div className="flex flex-col items-end gap-0.5 shrink-0">
-              <Badge className={cn("text-[9px] px-1.5 h-4 leading-none", partOfSpeechColors[partOfSpeech])}>
+              <Badge className={cn("text-[9px] px-1.5 h-4 leading-none border-0", partOfSpeechColors[partOfSpeech])}>
                 {partOfSpeechLabels[partOfSpeech].substring(0, 3)}.
               </Badge>
               {flashcard.verbType && (
-                <Badge variant="outline" className="text-[8px] px-1.5 h-4 border-primary/30 text-primary uppercase font-bold leading-none">
+                <Badge variant="outline" className="ghost-tag h-4 bg-primary/10 px-1.5 text-[8px] uppercase font-medium leading-none text-primary border-0">
                   {flashcard.verbType === "regular" ? "Reg" : "Irr"}
-                </Badge>
-              )}
-              {flashcard.falseCognate?.isFalseCognate && (
-                <Badge className="text-[8px] px-1.5 h-4 bg-amber-500 text-white border-0 font-bold uppercase shrink-0 leading-none">
-                  Falso
                 </Badge>
               )}
             </div>
@@ -380,7 +368,7 @@ export function FlashcardCard({ flashcard, onDelete, onCreateFromAlternative, on
           animationsEnabled ? "duration-300" : "duration-0",
           isFlipped ? "opacity-100 translate-y-0" : "opacity-0 translate-y-[100%]"
         )}>
-          <p className="text-sm font-bold text-center">{flashcard.translation}</p>
+          <p className="text-sm font-medium text-center">{flashcard.translation}</p>
           <div className="flex justify-center gap-1 mt-2">
             <Button variant="ghost" size="icon" className="size-6" onClick={(e) => { e.stopPropagation(); speak(flashcard.word); }}>
               <Volume2 className="size-3" />
@@ -410,23 +398,15 @@ export function FlashcardCard({ flashcard, onDelete, onCreateFromAlternative, on
         )}
       >
         {/* Front */}
-        <div className="absolute inset-0 backface-hidden rounded-xl border bg-card p-6 shadow-sm flex flex-col">
+        <div className="surface-card surface-card-elevated interactive-lift absolute inset-0 backface-hidden rounded-[22px] p-6 flex flex-col">
           <div className="flex items-start justify-between">
             <div className="flex items-center gap-2">
-              <Badge 
-                variant="outline" 
-                className={cn("text-xs font-medium", partOfSpeechColors[partOfSpeech])}
-              >
+              <Badge variant="outline" className={cn("text-xs font-medium border-0", partOfSpeechColors[partOfSpeech])}>
                 {partOfSpeechLabels[partOfSpeech]}
               </Badge>
               {flashcard.verbType && (
-                <Badge variant="outline" className="text-[10px] uppercase tracking-wider border-primary/30 text-primary">
+                <Badge variant="outline" className="ghost-tag bg-primary/10 text-[10px] uppercase tracking-wider text-primary border-0">
                   {flashcard.verbType}
-                </Badge>
-              )}
-              {flashcard.falseCognate?.isFalseCognate && (
-                <Badge className="text-[10px] bg-amber-500 hover:bg-amber-600 border-0 text-white font-bold uppercase tracking-tight">
-                  Falso Cognato
                 </Badge>
               )}
             </div>
@@ -459,29 +439,23 @@ export function FlashcardCard({ flashcard, onDelete, onCreateFromAlternative, on
           </div>
 
           <div className="flex-1 flex items-center justify-center">
-            <h3 className="text-3xl font-bold text-foreground text-center break-words">
+            <h3 className="text-3xl font-medium text-foreground text-center break-words md:text-[2rem]">
               {flashcard.word}
             </h3>
           </div>
 
-          <div className="flex items-center justify-center gap-2 text-xs text-muted-foreground">
-            <RotateCcw className="size-3" />
-            <span>Clique para virar</span>
-          </div>
+          <Rotate3D className="minimal-rotate-hint size-4 text-muted-foreground" />
         </div>
 
         {/* Back */}
-        <div className="absolute inset-0 backface-hidden rotate-y-180 rounded-xl border bg-primary/5 p-5 shadow-sm flex flex-col overflow-hidden">
+        <div className="surface-card surface-card-elevated interactive-lift absolute inset-0 backface-hidden rotate-y-180 rounded-[22px] bg-card p-5 flex flex-col overflow-hidden">
           <div className="flex items-start justify-between mb-2">
             <div className="flex items-center gap-2">
-              <Badge 
-                variant="outline" 
-                className={cn("text-xs font-medium", partOfSpeechColors[partOfSpeech])}
-              >
+              <Badge variant="outline" className={cn("text-xs font-medium border-0", partOfSpeechColors[partOfSpeech])}>
                 {partOfSpeechLabels[partOfSpeech]}
               </Badge>
               {flashcard.verbType && (
-                <Badge variant="outline" className="text-[10px] uppercase tracking-wider border-primary/30 text-primary">
+                <Badge variant="outline" className="ghost-tag bg-primary/10 text-[10px] uppercase tracking-wider text-primary border-0">
                   {flashcard.verbType}
                 </Badge>
               )}
@@ -490,7 +464,7 @@ export function FlashcardCard({ flashcard, onDelete, onCreateFromAlternative, on
 
           <div className="space-y-2.5 flex-1 overflow-y-auto pr-1">
             <div className="flex items-start justify-between gap-2">
-              <p className="text-xl font-semibold text-foreground leading-snug">
+              <p className="text-xl font-medium text-foreground leading-snug">
                 {flashcard.translation}
               </p>
               <Button
@@ -507,7 +481,7 @@ export function FlashcardCard({ flashcard, onDelete, onCreateFromAlternative, on
               </Button>
             </div>
             {includeUsageNote && !!flashcard.usageNote && (
-              <div className="bg-muted/30 border border-border/40 rounded-lg p-2">
+              <div className="rounded-xl bg-muted/30 p-3">
                 <span className="text-[10px] font-bold text-muted-foreground uppercase tracking-widest">
                   Contexto
                 </span>
@@ -594,15 +568,6 @@ export function FlashcardCard({ flashcard, onDelete, onCreateFromAlternative, on
               </div>
             )}
 
-            {flashcard.falseCognate?.isFalseCognate && (
-              <div className="bg-amber-500/10 border border-amber-500/20 rounded-lg p-2 flex items-start gap-2">
-                <AlertTriangle className="size-3.5 text-amber-600 shrink-0 mt-0.5" />
-                <p className="text-[10px] text-amber-700 leading-tight">
-                  {flashcard.falseCognate.warning}
-                </p>
-              </div>
-            )}
-
             {alternativeForms.length > 0 && (
               <div className="pt-2 border-t border-border/50">
                 <span className="text-[10px] font-bold text-muted-foreground uppercase tracking-widest block mb-2">
@@ -610,12 +575,12 @@ export function FlashcardCard({ flashcard, onDelete, onCreateFromAlternative, on
                 </span>
                 <div className="space-y-2">
                   {alternativeForms.map((form, idx) => (
-                    <div key={idx} className="bg-card/50 rounded-lg p-2 border border-border/30">
+                    <div key={idx} className="rounded-xl bg-muted/25 p-2.5">
                       <div className="flex items-center gap-2 mb-1">
                         <Badge 
                           variant="outline" 
                           className={cn(
-                            "text-[9px] h-4 font-bold uppercase tracking-tighter border-0 cursor-pointer hover:opacity-90",
+                            "ghost-tag text-[9px] h-4 font-medium uppercase tracking-tighter border-0 cursor-pointer hover:opacity-90",
                             partOfSpeechColors[form.partOfSpeech]
                           )}
                           onClick={(e) => {
@@ -626,7 +591,7 @@ export function FlashcardCard({ flashcard, onDelete, onCreateFromAlternative, on
                           {partOfSpeechLabels[form.partOfSpeech]}
                         </Badge>
                         <div className="flex flex-col leading-tight min-w-0">
-                          <span className="text-xs font-bold text-foreground truncate">
+                          <span className="text-xs font-medium text-foreground truncate">
                             {form.word || ""}
                           </span>
                           <span className="text-[10px] text-muted-foreground truncate">
@@ -644,10 +609,7 @@ export function FlashcardCard({ flashcard, onDelete, onCreateFromAlternative, on
             )}
           </div>
 
-          <div className="flex items-center justify-center gap-2 text-xs text-muted-foreground pt-2">
-            <RotateCcw className="size-3" />
-            <span>Clique para voltar</span>
-          </div>
+          <Rotate3D className="minimal-rotate-hint size-4 text-muted-foreground" />
         </div>
       </div>
 
