@@ -1,6 +1,8 @@
-import type { Flashcard, GrammarExercise } from "./types"
+import type { Flashcard, GrammarExercise, GrammarQuestionOption } from "./types"
 
 const OPENROUTER_API_URL = "https://openrouter.ai/api/v1/chat/completions"
+export const DEFAULT_AI_MODEL = process.env.DEFAULT_AI_MODEL ?? "openai/gpt-5.4-nano"
+export const REVISOR_AI_MODEL = process.env.REVISOR_AI_MODEL ?? DEFAULT_AI_MODEL
 
 interface OpenRouterMessage {
   role: "system" | "user" | "assistant"
@@ -16,11 +18,15 @@ interface OpenRouterResponse {
 }
 
 async function callOpenRouter<T>(
-  apiKey: string,
   messages: OpenRouterMessage[],
-  model: string = "openai/gpt-5.4-nano",
+  model: string = DEFAULT_AI_MODEL,
   responseFormat?: { type: "json_object" }
 ): Promise<T> {
+  const apiKey = process.env.OPENROUTER_API_KEY
+  if (!apiKey) {
+    throw new Error("OPENROUTER_API_KEY não configurada no servidor.")
+  }
+
   const response = await fetch(OPENROUTER_API_URL, {
     method: "POST",
     headers: {
@@ -107,9 +113,8 @@ export interface FlashcardRevisionResponse {
 }
 
 export async function generateFlashcardData(
-  apiKey: string,
   word: string,
-  model: string = "openai/gpt-5.4-mini",
+  model: string = DEFAULT_AI_MODEL,
   options?: GenerateFlashcardOptions
 ): Promise<FlashcardAIResponse> {
   const synonymsLevel = Math.max(0, Math.min(3, options?.synonymsLevel ?? 2))
@@ -235,13 +240,12 @@ VERBOS (verbType):
     },
   ]
 
-  return callOpenRouter<FlashcardAIResponse>(apiKey, messages, model, {
+  return callOpenRouter<FlashcardAIResponse>(messages, model, {
     type: "json_object",
   })
 }
 
 export async function reviseFlashcardByTranslation(
-  apiKey: string,
   input: {
     word: string
     partOfSpeech: string
@@ -251,7 +255,7 @@ export async function reviseFlashcardByTranslation(
     includeAlternativeForms?: boolean
     includeUsageNote?: boolean
   },
-  model: string = "openai/gpt-5.4-mini"
+  model: string = DEFAULT_AI_MODEL
 ): Promise<FlashcardRevisionResponse> {
   const synonymsLevel = Math.max(0, Math.min(3, input.synonymsLevel ?? 2))
   const includeAlternativeForms = input.includeAlternativeForms ?? true
@@ -333,14 +337,13 @@ Retorne o JSON com esta estrutura exata (Chaves em inglês):
     },
   ]
 
-  return callOpenRouter<FlashcardRevisionResponse>(apiKey, messages, model, { type: "json_object" })
+  return callOpenRouter<FlashcardRevisionResponse>(messages, model, { type: "json_object" })
 }
 
 export async function generateGrammarExercises(
-  apiKey: string,
   flashcards: Flashcard[],
   exerciseType: "fill-blank" | "verb-conjugation" | "mixed",
-  model: string = "openai/gpt-5.4-mini",
+  model: string = DEFAULT_AI_MODEL,
   count: number = 5
 ): Promise<GrammarExercise[]> {
   const words = flashcards.map((f) => f.word).join(", ")
@@ -382,11 +385,161 @@ Crie ${count} exercícios. As frases devem ser naturais no Inglês Americano e m
   ]
 
   const response = await callOpenRouter<{ exercises: GrammarExercise[] }>(
-    apiKey,
     messages,
     model,
     { type: "json_object" }
   )
 
   return response.exercises
+}
+
+interface GrammarQuestionResponse {
+  questionText: string
+  contextPassage?: string | null
+  options: GrammarQuestionOption[]
+}
+
+function normalizeOptions(raw: unknown): GrammarQuestionOption[] {
+  const letters: GrammarQuestionOption["letter"][] = ["A", "B", "C", "D", "E"]
+  const fallback = letters.map((letter, idx) => ({
+    letter,
+    text: `Option ${idx + 1}`,
+    isAnswer: letter === "A",
+    explanation: "",
+  }))
+
+  if (!Array.isArray(raw)) return fallback
+
+  const mapped = raw
+    .map((opt, idx) => {
+      const value = opt as Partial<GrammarQuestionOption>
+      const letter = letters[idx]
+      return {
+        letter,
+        text: typeof value?.text === "string" && value.text.trim() ? value.text : `Option ${idx + 1}`,
+        isAnswer: Boolean(value?.isAnswer),
+        explanation: typeof value?.explanation === "string" ? value.explanation : "",
+      }
+    })
+    .slice(0, 5)
+
+  while (mapped.length < 5) {
+    const letter = letters[mapped.length]
+    mapped.push({ letter, text: `Option ${mapped.length + 1}`, isAnswer: false, explanation: "" })
+  }
+
+  if (!mapped.some((o) => o.isAnswer)) {
+    mapped[0].isAnswer = true
+  }
+
+  return mapped
+}
+
+export async function generateGrammarQuestion(
+  topicLabel: string,
+  subtopics: string[],
+  questionType: "correct" | "incorrect",
+  model: string = DEFAULT_AI_MODEL,
+  userWords?: string[]
+): Promise<GrammarQuestionResponse> {
+  const scope = [topicLabel, ...subtopics].filter(Boolean).join(" > ")
+  const userWordsHint = Array.isArray(userWords) && userWords.length > 0
+    ? `Use naturalmente algumas destas palavras do aluno quando fizer sentido: ${userWords.slice(0, 20).join(", ")}.`
+    : ""
+
+  const messages: OpenRouterMessage[] = [
+    {
+      role: "system",
+      content: `Você é um professor de Inglês Americano para brasileiros. Gere 1 questão de múltipla escolha com 5 alternativas (A-E).
+
+Tipo da questão:
+- correct: apenas 1 frase está gramaticalmente correta.
+- incorrect: apenas 1 frase está gramaticalmente incorreta.
+
+Regras:
+- Tema principal: ${topicLabel}.
+- Subtópicos: ${subtopics.join(", ") || "(nenhum)"}.
+- Dificuldade: intermediário.
+- Frases naturais em inglês americano.
+- Forneça explicações curtas em português brasileiro para cada alternativa.
+- Não use conteúdo ofensivo.
+${userWordsHint}
+
+Retorne JSON com exatamente:
+{
+  "questionText": "...",
+  "contextPassage": "..." | null,
+  "options": [
+    { "letter": "A", "text": "...", "isAnswer": false, "explanation": "..." },
+    { "letter": "B", "text": "...", "isAnswer": false, "explanation": "..." },
+    { "letter": "C", "text": "...", "isAnswer": false, "explanation": "..." },
+    { "letter": "D", "text": "...", "isAnswer": false, "explanation": "..." },
+    { "letter": "E", "text": "...", "isAnswer": false, "explanation": "..." }
+  ]
+}
+
+Garanta exatamente uma alternativa correta para o tipo solicitado.`,
+    },
+    {
+      role: "user",
+      content: `Crie uma questão do tipo "${questionType}" para o escopo: ${scope || topicLabel}.`,
+    },
+  ]
+
+  const generated = await callOpenRouter<GrammarQuestionResponse>(messages, model, {
+    type: "json_object",
+  })
+
+  return {
+    questionText: generated?.questionText ?? "Choose the best option.",
+    contextPassage: generated?.contextPassage ?? null,
+    options: normalizeOptions(generated?.options),
+  }
+}
+
+export async function evaluateGrammarQuestion(
+  generated: GrammarQuestionResponse,
+  questionType: "correct" | "incorrect",
+  tagLabel: string,
+  model: string = REVISOR_AI_MODEL
+): Promise<GrammarQuestionResponse> {
+  const messages: OpenRouterMessage[] = [
+    {
+      role: "system",
+      content: `Você é um revisor de qualidade para questões de gramática em Inglês Americano.
+Revise a questão recebida, preserve o mesmo tipo (${questionType}) e retorne somente JSON na mesma estrutura.
+Garanta:
+- 5 alternativas (A-E)
+- exatamente uma resposta correta
+- explicações curtas em português brasileiro
+- texto natural e sem ambiguidade
+
+Retorne apenas:
+{
+  "questionText": "...",
+  "contextPassage": "..." | null,
+  "options": [
+    { "letter": "A", "text": "...", "isAnswer": false, "explanation": "..." },
+    { "letter": "B", "text": "...", "isAnswer": false, "explanation": "..." },
+    { "letter": "C", "text": "...", "isAnswer": false, "explanation": "..." },
+    { "letter": "D", "text": "...", "isAnswer": false, "explanation": "..." },
+    { "letter": "E", "text": "...", "isAnswer": false, "explanation": "..." }
+  ]
+}`,
+    },
+    {
+      role: "user",
+      content: JSON.stringify({ tagLabel, questionType, generated }),
+    },
+  ]
+
+  const reviewed = await callOpenRouter<GrammarQuestionResponse>(messages, model, {
+    type: "json_object",
+  })
+
+  return {
+    questionText: reviewed?.questionText ?? generated.questionText,
+    contextPassage: reviewed?.contextPassage ?? generated.contextPassage ?? null,
+    options: normalizeOptions(reviewed?.options),
+  }
 }
