@@ -85,7 +85,7 @@ export interface GrammarExerciseSet {
   exercises: GrammarExercise[]
 }
 
-// ── Grammar Lab MCQ system (EFOMM / EN / AFA style) ──────────────────────────
+// ── GrammarLab MCQ system (EFOMM / EN / AFA style) ───────────────────────────
 
 export interface GrammarQuestionOption {
   letter: "A" | "B" | "C" | "D" | "E"

@@ -169,106 +169,92 @@ export async function generateFlashcardData(
      * literal: ação física / objeto concreto / denotação direta
      * figurative: uso metafórico/abstrato (não físico)
      * slang: expressão muito informal / coloquial / idiomática
-   - Fidelidade ao contexto: não inclua palavras que servem apenas para outros sentidos da palavra (ex: se "drink" significa álcool no contexto social, não inclua "hydrate").
+   - Fidelidade ao contexto: não inclua palavras que servem apenas para outros sentidos da palavra.
    - Exclusão: evite palavras genéricas ou preguiçosas ("get", "do", "go") a menos que sejam a melhor correspondência.
-   - Antônimos: prefira opostos diretos do significado pretendido (ex: para "go drinking", prefira "stay sober").`
+   - Antônimos: prefira opostos diretos do significado pretendido.`
 
   const conjugationsInstruction = includeConjugations
     ? `6. CONJUGAÇÕES (Em Inglês Americano): Se "partOfSpeech" for "verb", forneça os 6 tempos verbais. Se NÃO for um verbo, defina "conjugations" como null.`
     : `6. CONJUGAÇÕES: Defina "conjugations" null.`
 
   const usageNoteInstruction = includeUsageNote
-    ? `3b. NOTA DE USO (opcional): Seja EXTREMAMENTE DIDÁTICO, porém PRECISO e DIRETO AO PONTO (estilo flashcard, máximo absoluto de 2 frases curtas). 
-   - SE A PALAVRA FOR UMA SIGLA (ex: CWQ), OBRIGATORIAMENTE escreva o que as letras significam em inglês.
-   - Explique a essência do uso, nuance ou conceito técnico em PORTUGUÊS BRASILEIRO.
-   - PROIBIDO usar introduções longas. Vá direto para a regra prática ou definição conceitual.
-   - PROIBIDO dar "bronca" ou mencionar correções ortográficas/hífens errados que você ajustou no passo 1. Aja como se a palavra tivesse sido digitada perfeitamente.
-   - Se a palavra não tiver nenhuma nuance especial e não for sigla, retorne "".`
+    ? `3b. NOTA DE USO / CONTEXTO (opcional): Seja ULTRA CONCISO e DIRETO (estilo flashcard, máximo de 1 a 2 frases curtas). 
+   - PROIBIDO usar introduções narrativas ou metalinguagem (NÃO escreva "A palavra X descreve...", "Diz-se quando...", "É comum em...").
+   - Escreva DIRETAMENTE a regra ou nuance (Ex: "Usado para indicar inferioridade em tamanho ou escala." em vez de "Dwarfing é uma palavra usada para indicar...").
+   - SE A PALAVRA FOR UMA SIGLA, OBRIGATORIAMENTE escreva o que as letras significam em inglês.
+   - Explique a essência em PORTUGUÊS BRASILEIRO.
+   - PROIBIDO dar "bronca" ou mencionar correções ortográficas que você ajustou.
+   - Se a palavra não tiver nuance especial, retorne "".`
     : `3b. NOTA DE USO: NÃO gere notas de uso. Sempre retorne "usageNote": "".`
 
   const alternativeFormsInstruction = includeAlternativeForms && !isCompoundOrAcronym
-    ? `7. FORMAS ALTERNATIVAS (Derivações e Conversões): SEMPRE QUE POSSÍVEL, force a inclusão de até 2 formas derivadas ou de conversão de classe gramatical muito comuns no Inglês Americano. 
-   - Exemplo prático: se o card for o verbo "run", busque listar o substantivo ("run" - a corrida) e um derivado ("runner" - o corredor, ou "runny" - escorrendo). Se for "use", traga "useful" e "usage".
-IMPORTANTE:
-   - TRAVA DE EXPRESSÕES: Se após a normalização (no passo 1) a sua palavra final contiver ESPAÇOS (ou seja, se transformou em uma "phrase"), ABORTE esta regra e retorne "alternativeForms": [] obrigatoriamente.
-   - Tente atingir o máximo de 2 formas sempre que existirem derivações naturais.
-   - A classe gramatical ("partOfSpeech") dessas alternativas DEVE ser diferente da classe principal do card.
-   - A "word" deve ser a forma correta em INGLÊS. Pode ser a mesma palavra-raiz atuando em outra classe gramatical.
-   - Forneça uma tradução concisa e natural EM PORTUGUÊS BRASILEIRO (OBRIGATÓRIO incluir o artigo se for substantivo, ex: "a elevação").
+    ? `7. FORMAS ALTERNATIVAS (Derivações e Conversões): SEMPRE QUE POSSÍVEL, force a inclusão de até 2 formas derivadas comuns no Inglês Americano. 
+   - TRAVA DE EXPRESSÕES: Se a sua palavra final contiver ESPAÇOS, ABORTE esta regra e retorne "alternativeForms": [] obrigatoriamente.
+   - A classe gramatical ("partOfSpeech") DEVE ser diferente da principal.
+   - A "word" deve ser em INGLÊS.
+   - Forneça uma tradução SECA e DIRETA EM PORTUGUÊS BRASILEIRO (OBRIGATÓRIO incluir o artigo se for substantivo).
    - Evite meta-definições ("o ato de...").
    - Forneça uma frase de exemplo EM INGLÊS usando essa forma alternativa.`
     : `7. FORMAS ALTERNATIVAS: NÃO gere formas alternativas. Sempre retorne "alternativeForms": [].`
 
   const efommInstruction = efommMode
-    ? `MODO EFOMM (MARÍTIMO): Priorize significados e frases de exemplo do contexto marítimo/naval/portuário/logístico no Inglês Americano, se aplicável e natural. NÃO force se ficar antinatural.
-Se alterar o significado em comparação com o uso diário, aplique a mesma regra de essência na "usageNote": seja ULTRA CONCISO (máx 1 a 2 frases diretas, sem enrolação). Não mencione o contexto marítimo explicitamente se não alterar o sentido.`
+    ? `MODO EFOMM (MARÍTIMO/NAVAL): Priorize significados, jargões e exemplos do contexto marítimo, naval, portuário e logístico (Inglês Técnico Marítimo). 
+NÃO force se a palavra não existir nesse contexto. Se o significado alterar em relação ao uso civil/diário, aplique a regra na "usageNote" de forma SECA e DIRETA (ex: "No contexto naval, refere-se à amarração da embarcação").`
     : ``
 
   const messages: OpenRouterMessage[] = [
     {
       role: "system",
-      content: `Você é um professor sênior de Inglês Americano especializado em ensinar falantes nativos de Português Brasileiro.
+      content: `Você é um professor sênior de Inglês Americano especializado em ensinar brasileiros.
 Sua base de conhecimento é estritamente INGLÊS AMERICANO.
 
 ${efommInstruction}
 
-Quando receber uma palavra em inglês, siga estes passos para gerar dados de estudo:
-0. MORFOLOGIA (-ing): Se a palavra terminar em "-ing", decida se é:
-   - um SUBSTANTIVO VERBAL (noun) nomeando um objeto, sistema, atividade estabelecida ou processo fixo (ex: "mooring", "rigging", "wiring"), ou
-   - um GERÚNDIO / PARTICÍPIO PRESENTE (verb) expressando uma ação em andamento.
-   Prefira "noun" quando a forma -ing comumente nomeia um objeto/sistema, especialmente no uso técnico.
-1. NORMALIZAÇÃO (CORREÇÃO DE ERROS E HÍFEN - SILENCIOSA):
-   - ERRO DE HÍFEN EM VERBOS/EXPRESSÕES: Se o usuário enviou verbos compostos, modais ou phrasal verbs com hífen indevido (ex: "look-forward-to", "rely-on", "should-have", "carry-out"), CORRIJA SILENCIOSAMENTE substituindo o hífen por um ESPAÇO em "normalizedWord" (ex: "look forward to", "rely on"). PROIBIDO juntar as palavras. NÃO comente sobre esse erro na Nota de Uso.
-   - ERRO DE INFINITIVO: Se o usuário enviar "to-steer" ou "to steer", remova o "to" silenciosamente e normalize apenas para "steer".
-   - HÍFEN CORRETO: Substantivos ou adjetivos que exigem hífen (ex: "make-up", "might-be") mantêm o hífen.
-   - Siglas e termos compostos corretos (ex: "challenging water quality"): mantenha a forma original.
-2. CLASSE GRAMATICAL ("partOfSpeech"): Classifique OBRIGATORIAMENTE a palavra usando APENAS as classes do JSON. 
+Siga estes passos para gerar dados de estudo:
+0. MORFOLOGIA (-ing): Se a palavra terminar em "-ing", decida se é um SUBSTANTIVO VERBAL (noun - ex: "mooring") ou GERÚNDIO/PARTICÍPIO (verb). Prefira "noun" quando nomeia um objeto/sistema.
+1. NORMALIZAÇÃO:
+   - ERRO DE HÍFEN EM VERBOS/EXPRESSÕES: Corrija silenciosamente ("look-forward-to" -> "look forward to"). PROIBIDO juntar as palavras.
+   - ERRO DE INFINITIVO: Remova o "to" ("to-steer" -> "steer").
+   - HÍFEN CORRETO: Mantenha em substantivos/adjetivos que exigem (ex: "make-up").
+2. CLASSE GRAMATICAL ("partOfSpeech"): Classifique OBRIGATORIAMENTE usando APENAS as classes do JSON. 
    - Retorne "acronym" para siglas. 
-   - Retorne "phrase" APENAS para expressões com mais de uma palavra SEPARADAS POR ESPAÇO (ex: "look forward to", "rely on", "should have"). Palavras ligadas por hífen NÃO são "phrase", classifique-as por sua função (geralmente "noun" ou "adjective").
-3. Tradução em Português Brasileiro. Forneça exatamente 1 ou 2 traduções mais comuns e precisas em português, separadas por barra (/).
-   - Prefira uma tradução neutra e padrão.
-   - TRADUÇÃO TÉCNICA (ANTI-ROBÔ): Para expressões compostas e siglas técnicas, evite traduções literais palavra por palavra. Use jargão natural. Exemplo: não traduza "challenging" em contexto de engenharia como "desafiadora", prefira "adversa", "crítica" ou "fora do padrão".
-   - IMPORTANTE (artigos): Se a classe gramatical for "noun" ou "phrase", SEMPRE inclua o artigo mais natural em português junto com a tradução (ex: "a proa", "o porto", "a qualidade"). Use "o/a" para singular e "os/as" para plural.
-   - IMPORTANTE (evite meta-definições): NÃO traduza substantivos com explicações como "o ato de ..." / "a ação de ...".
+   - Retorne "phrase" APENAS para expressões com mais de uma palavra SEPARADAS POR ESPAÇO.
+3. TRADUÇÃO (SECA E DIRETA): Forneça 1 ou 2 traduções mais comuns em português, separadas por barra (/).
+   - REGRA DE OURO: PROIBIDO incluir parênteses, explicações, contextos ou frases dentro do campo de tradução (NÃO faça: "ofuscamento (em relação a algo maior)").
+   - PROIBIDO usar meta-definições ou frases ("o ato de...", "ficar menor que..."). A tradução deve ser a palavra equivalente, não o significado dela.
+   - IMPORTANTE (artigos): Se for "noun" ou "phrase", SEMPRE inclua o artigo (ex: "a proa", "o porto").
+   - TRADUÇÃO TÉCNICA: Evite traduções literais em jargões.
 ${usageNoteInstruction}
 ${synonymsInstruction}
-5. Uma frase de exemplo natural em INGLÊS AMERICANO.
+5. EXEMPLO: Uma frase de exemplo natural em INGLÊS AMERICANO.
 ${conjugationsInstruction}
 ${alternativeFormsInstruction}
 
-Retorne um JSON com esta estrutura exata (MANTENHA AS CHAVES DO JSON EM INGLÊS):
+Retorne um JSON exato (MANTENHA AS CHAVES EM INGLÊS):
 {
   "normalizedWord": "a palavra",
   "partOfSpeech": "verb" | "noun" | "adjective" | "adverb" | "preposition" | "conjunction" | "interjection" | "phrase" | "acronym",
-  "translation": "tradução em português (com artigo para substantivos)",
-  "usageNote": "nota curta em português ou string vazia",
+  "translation": "tradução seca (com artigo para substantivos)",
+  "usageNote": "nota super direta ou string vazia",
   "synonyms": [{"word": "synonym1", "type": "literal" | "figurative" | "slang"}],
   "antonyms": [{"word": "antonym1", "type": "literal" | "figurative" | "slang"}],
   "example": "Frase de exemplo em inglês.",
-  "exampleTranslation": "Tradução natural da frase acima em Português Brasileiro.",
+  "exampleTranslation": "Tradução natural da frase em Português Brasileiro.",
   "alternativeForms": [{"word": "elevation", "partOfSpeech": "noun", "translation": "a elevação", "example": "The elevation is 2,000 meters."}],
   "_verbReasoning": "Template: 'Passado é [palavra]. Termina em -ed/-d? [Yes/No]. Tipo: [regular/irregular]'",
   "verbType": "regular" | "irregular" | null,
-  "conjugations": {
-    "simplePresent": "runs",
-    "simplePast": "ran",
-    "presentContinuous": "is running",
-    "pastContinuous": "was running",
-    "presentPerfect": "has run",
-    "pastPerfect": "had run"
-  }
+  "conjugations": { ... }
 }
 
-REGRAS CRÍTICAS PARA O JSON:
-VERBOS (verbType):
-   - Se "partOfSpeech" NÃO for verbo: defina "_verbReasoning" como "n/a" e "verbType" como null.
-   - Se FOR verbo, preencha "_verbReasoning" primeiro. Se terminar em -ed/-d (Yes), você DEVE definir "verbType": "regular". Se não (No - como cut, put, bought), você DEVE definir "verbType": "irregular".`,
+REGRAS CRÍTICAS DE VERBOS:
+   - Se NÃO for verbo: "_verbReasoning": "n/a", "verbType": null.
+   - Se FOR verbo: "_verbReasoning" decide. Se passado termina em -ed/-d (Yes), "verbType": "regular". Senão, "verbType": "irregular".`,
     },
     {
       role: "user",
       content: targetPartOfSpeech
-        ? `Gere dados de flashcard para a palavra/forma/sigla: "${word}". IMPORTANTE: Trate-a com o uso de "${targetPartOfSpeech}" e retorne "partOfSpeech" como "${targetPartOfSpeech}".`
-        : `Gere dados de flashcard para a palavra/forma/sigla: "${word}"`,
+        ? `Gere dados de flashcard para: "${word}". Trate-a EXCLUSIVAMENTE com o uso de "${targetPartOfSpeech}" e retorne "partOfSpeech" como "${targetPartOfSpeech}".`
+        : `Gere dados de flashcard para: "${word}"`,
     },
   ]
 
@@ -299,48 +285,44 @@ export async function reviseFlashcardByTranslation(
   const synonymsInstruction =
     synonymsLevel === 0
       ? `NÃO gere sinônimos ou antônimos. Retorne "synonyms": [] e "antonyms": [].`
-      : `Forneça até ${synonymsLevel} sinônimos e até ${synonymsLevel} antônimos em INGLÊS que correspondam ao sentido EXATO implícito pela tradução.`
+      : `Forneça até ${synonymsLevel} sinônimos e até ${synonymsLevel} antônimos em INGLÊS que correspondam ao sentido EXATO implícito pela nova tradução.`
 
   const alternativeFormsInstruction = includeAlternativeForms && !isCompoundOrAcronym
-    ? `FORMAS ALTERNATIVAS (Derivações e Conversões): SEMPRE QUE POSSÍVEL, inclua até 2 formas derivadas ou de conversão de classe gramatical.
-   - Tente atingir o máximo de 2 formas sempre que existirem derivações naturais.
+    ? `FORMAS ALTERNATIVAS: SEMPRE QUE POSSÍVEL, inclua até 2 formas derivadas.
    - A classe gramatical deve ser diferente da classe principal.
-   - A palavra deve estar em INGLÊS. Forneça tradução natural em PORTUGUÊS BRASILEIRO (com artigo para substantivos) e um exemplo em INGLÊS.
-   - Evite meta-definições ("o ato de...").`
+   - Forneça tradução SECA em PORTUGUÊS BRASILEIRO (com artigo para substantivos) e um exemplo em INGLÊS.
+   - PROIBIDO meta-definições ("o ato de...").`
     : `Sempre retorne "alternativeForms": [].`
 
   const usageNoteInstruction = includeUsageNote
-    ? `NOTA DE USO (opcional): Seja EXTREMAMENTE DIDÁTICO, porém PRECISO e DIRETO AO PONTO (estilo flashcard, máximo absoluto de 2 frases curtas). 
-   - SE A PALAVRA FOR UMA SIGLA, OBRIGATORIAMENTE escreva o que as letras significam em inglês.
-   - Explique a essência do uso, nuance ou conceito em PORTUGUÊS BRASILEIRO.
-   - PROIBIDO usar introduções longas. Vá direto para a regra prática.
-   - Se a palavra não tiver nenhuma nuance especial de uso, retorne "".`
+    ? `NOTA DE USO (opcional): Seja ULTRA CONCISO e DIRETO AO PONTO (estilo flashcard, máx 1 a 2 frases curtas). 
+   - PROIBIDO usar introduções narrativas (NÃO escreva "A palavra descreve..."). Vá direto para a regra.
+   - SE FOR SIGLA, escreva o que as letras significam em inglês.
+   - Se não tiver nuance especial, retorne "".`
     : `NOTA DE USO: NÃO gere notas de uso. Sempre retorne "usageNote": "".`
 
   const efommInstruction = efommMode
-    ? `MODO EFOMM (MARÍTIMO): Dê preferência a contextos navais e marítimos se for plausível. Se alterar o significado diário, aplique a mesma regra de essência na "usageNote": seja ULTRA CONCISO (máx 1 a 2 frases).`
+    ? `MODO EFOMM (MARÍTIMO): Dê preferência a contextos navais e marítimos se for plausível. Se alterar o significado, aponte isso na "usageNote" de forma direta e curta.`
     : ``
 
   const messages: OpenRouterMessage[] = [
     {
       role: "system",
       content: `Você é um professor sênior de Inglês Americano ensinando falantes de Português Brasileiro.
-Sua base de conhecimento é estritamente INGLÊS AMERICANO.
 
 ${efommInstruction}
 
 Você receberá:
-- uma palavra, sigla ou termo em inglês
+- uma palavra/sigla em inglês
 - uma classe gramatical fixa
-- uma NOVA tradução em português escolhida pelo usuário
+- uma NOVA tradução em português
 
 Sua tarefa:
-- Mantenha a mesma palavra/sigla em inglês e a mesma classe gramatical.
-- Atualize todos os outros campos para ficarem consistentes com essa NOVA tradução/sentido.
+- Mantenha a palavra e classe gramatical idênticas.
+- Atualize os campos para ficarem consistentes com a NOVA tradução.
 
 Regras:
-- "translation" DEVE ser retornada exatamente como fornecida pelo usuário.
-- Para substantivos (nouns), caso você gere outras formas alternativas, use artigos em português ("a proa", "o porto").
+- "translation" DEVE ser retornada exatamente como fornecida.
 - Sinônimos/antônimos (em inglês) DEVEM incluir um tipo: "literal" | "figurative" | "slang".
 - Fidelidade: Liste apenas sinônimos e exemplos que se encaixem perfeitamente nesse novo sentido.
 
@@ -348,14 +330,14 @@ Instrução de sinônimos/antônimos: ${synonymsInstruction}
 Instrução de nota de uso: ${usageNoteInstruction}
 Instrução de formas alternativas: ${alternativeFormsInstruction}
 
-Retorne o JSON com esta estrutura exata (Chaves em inglês):
+Retorne o JSON exato:
 {
   "translation": "tradução fornecida pelo usuário",
-  "usageNote": "string em português",
+  "usageNote": "nota super direta em português",
   "synonyms": [{"word": "x", "type": "literal" | "figurative" | "slang"}],
   "antonyms": [{"word": "y", "type": "literal" | "figurative" | "slang"}],
-  "example": "Frase de exemplo em Inglês Americano para este sentido",
-  "exampleTranslation": "Tradução natural da frase acima em Português Brasileiro.",
+  "example": "Frase de exemplo em Inglês",
+  "exampleTranslation": "Tradução natural da frase",
   "alternativeForms": [{"word": "form", "partOfSpeech": "noun", "translation": "o/a ...", "example": "..." }]
 }`,
     },
