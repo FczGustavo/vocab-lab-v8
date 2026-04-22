@@ -193,7 +193,7 @@ export function SettingsDialog() {
           <span className="sr-only">Configurações</span>
         </Button>
       </DialogTrigger>
-      <DialogContent className="sm:max-w-2xl p-0 overflow-hidden">
+      <DialogContent className="max-w-[94vw] p-0 overflow-hidden sm:max-w-2xl">
           <DialogHeader className="p-5">
           <DialogTitle className="flex items-center gap-2">
             <Settings className="size-5 text-primary" />
@@ -222,7 +222,7 @@ export function SettingsDialog() {
                     <Sun className="size-4 text-primary" />
                     Tema do Aplicativo
                   </h4>
-                  <div className="flex p-1 bg-muted rounded-lg">
+                  <div className="grid grid-cols-1 gap-1 bg-muted p-1 sm:grid-cols-3 sm:gap-0 sm:rounded-lg">
                     <Button
                       variant={theme === "light" ? "secondary" : "ghost"}
                       size="sm"
@@ -258,7 +258,7 @@ export function SettingsDialog() {
                     <Sparkles className="size-4 text-primary" />
                     Tema de Cores
                   </h4>
-                  <div className="flex p-1 bg-muted rounded-lg">
+                  <div className="grid grid-cols-1 gap-1 bg-muted p-1 sm:grid-cols-3 sm:gap-0 sm:rounded-lg">
                     <Button
                       variant={palette === "blue" ? "secondary" : "ghost"}
                       size="sm"

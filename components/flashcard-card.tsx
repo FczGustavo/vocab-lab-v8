@@ -387,7 +387,7 @@ export function FlashcardCard({ flashcard, onDelete, onCreateFromAlternative, on
   // Default Grid Layout
   return (
     <div
-      className="group perspective-1000 h-80 cursor-pointer"
+      className="group perspective-1000 h-[19rem] cursor-pointer sm:h-80"
       onClick={() => setIsFlipped(!isFlipped)}
     >
       <div
@@ -398,7 +398,7 @@ export function FlashcardCard({ flashcard, onDelete, onCreateFromAlternative, on
         )}
       >
         {/* Front */}
-        <div className="surface-card surface-card-elevated interactive-lift absolute inset-0 backface-hidden rounded-[22px] p-6 flex flex-col">
+        <div className="surface-card surface-card-elevated interactive-lift absolute inset-0 flex flex-col rounded-[20px] p-4 backface-hidden sm:rounded-[22px] sm:p-6">
           <div className="flex items-start justify-between">
             <div className="flex items-center gap-2">
               <Badge variant="outline" className={cn("text-xs font-medium border-0", partOfSpeechColors[partOfSpeech])}>
@@ -439,7 +439,7 @@ export function FlashcardCard({ flashcard, onDelete, onCreateFromAlternative, on
           </div>
 
           <div className="flex-1 flex items-center justify-center">
-            <h3 className="text-3xl font-medium text-foreground text-center break-words md:text-[2rem]">
+            <h3 className="text-center text-2xl font-medium break-words text-foreground sm:text-3xl md:text-[2rem]">
               {flashcard.word}
             </h3>
           </div>
@@ -448,7 +448,7 @@ export function FlashcardCard({ flashcard, onDelete, onCreateFromAlternative, on
         </div>
 
         {/* Back */}
-        <div className="surface-card surface-card-elevated interactive-lift absolute inset-0 backface-hidden rotate-y-180 rounded-[22px] bg-card p-5 flex flex-col overflow-hidden">
+        <div className="surface-card surface-card-elevated interactive-lift absolute inset-0 flex flex-col overflow-hidden rounded-[20px] bg-card p-4 backface-hidden rotate-y-180 sm:rounded-[22px] sm:p-5">
           <div className="flex items-start justify-between mb-2">
             <div className="flex items-center gap-2">
               <Badge variant="outline" className={cn("text-xs font-medium border-0", partOfSpeechColors[partOfSpeech])}>
@@ -614,7 +614,7 @@ export function FlashcardCard({ flashcard, onDelete, onCreateFromAlternative, on
       </div>
 
       <Dialog open={editOpen} onOpenChange={(o) => !editBusy && setEditOpen(o)}>
-        <DialogContent className="sm:max-w-md">
+        <DialogContent className="max-w-[92vw] sm:max-w-md">
           <DialogHeader>
             <DialogTitle>Editar tradução</DialogTitle>
             <DialogDescription>

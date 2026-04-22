@@ -120,14 +120,14 @@ export function WritingMode({ flashcards, onExit, onRemoveFromReview }: WritingM
   if (isFinished) {
     const kept = totalCards - removedIds.size
     return (
-      <div className="fixed inset-0 z-50 bg-background flex flex-col items-center justify-center p-6">
-        <div className="max-w-md w-full text-center space-y-8">
+      <div className="fixed inset-0 z-50 flex flex-col items-center justify-center bg-background p-4 sm:p-6">
+        <div className="w-full max-w-md space-y-6 text-center sm:space-y-8">
           <div className="size-24 rounded-full bg-primary/10 border border-primary/20 flex items-center justify-center mx-auto">
             <Trophy className="size-12 text-primary" />
           </div>
 
           <div className="space-y-2">
-            <h2 className="text-4xl font-black text-slate-900 dark:text-white uppercase tracking-tighter">
+            <h2 className="text-3xl font-black uppercase tracking-tighter text-slate-900 dark:text-white sm:text-4xl">
               Revisão Concluída!
             </h2>
             <p className="text-slate-500 dark:text-slate-400 font-medium">
@@ -135,7 +135,7 @@ export function WritingMode({ flashcards, onExit, onRemoveFromReview }: WritingM
             </p>
           </div>
 
-          <div className="grid grid-cols-2 gap-4">
+          <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 sm:gap-4">
             <div className="bg-slate-50 dark:bg-white/5 border border-slate-200 dark:border-white/10 rounded-2xl p-6">
               <div className="text-4xl font-black text-success">{sessionCorrect}</div>
               <div className="text-xs font-bold text-slate-500 uppercase tracking-widest mt-1">Acertos na 1ª</div>
@@ -183,9 +183,9 @@ export function WritingMode({ flashcards, onExit, onRemoveFromReview }: WritingM
   const progress = (doneCount / totalCards) * 100
 
   return (
-    <div className="fixed inset-0 z-50 bg-background dark:bg-slate-900 flex flex-col">
+    <div className="fixed inset-0 z-50 flex flex-col bg-background dark:bg-slate-900">
       {/* Header */}
-      <div className="flex items-center justify-between px-6 py-4 border-b border-border dark:border-white/10">
+      <div className="flex items-center justify-between gap-2 border-b border-border px-3 py-3 dark:border-white/10 sm:px-6 sm:py-4">
         <div className="flex items-center gap-3">
           <Button
             variant="ghost"
@@ -206,7 +206,7 @@ export function WritingMode({ flashcards, onExit, onRemoveFromReview }: WritingM
           </div>
         </div>
 
-        <div className="flex-1 mx-8">
+        <div className="mx-2 flex-1 sm:mx-8">
           <div className="h-1.5 bg-muted dark:bg-white/10 rounded-full overflow-hidden">
             <div
               className="h-full bg-success rounded-full transition-all duration-500"
@@ -215,16 +215,16 @@ export function WritingMode({ flashcards, onExit, onRemoveFromReview }: WritingM
           </div>
         </div>
 
-        <span className="text-sm font-semibold text-muted-foreground dark:text-white/70">
+        <span className="text-xs font-semibold text-muted-foreground dark:text-white/70 sm:text-sm">
           {doneCount}/{totalCards}
         </span>
       </div>
 
       {/* Content */}
-      <div className="flex-1 flex items-center justify-center p-6 bg-muted/20">
-        <div className="w-full max-w-lg space-y-6">
+      <div className="flex flex-1 items-center justify-center bg-muted/20 p-3 pb-[calc(env(safe-area-inset-bottom)+0.75rem)] sm:p-6">
+        <div className="w-full max-w-xl space-y-4 sm:space-y-6">
           {/* Translation card */}
-          <div className="surface-card surface-card-elevated space-y-4 p-6">
+          <div className="surface-card surface-card-elevated space-y-4 p-4 sm:p-6">
             <div className="flex items-center gap-2">
               <Badge
                 className={cn(
@@ -235,7 +235,7 @@ export function WritingMode({ flashcards, onExit, onRemoveFromReview }: WritingM
                 {partOfSpeechLabels[current.partOfSpeech || "noun"]}
               </Badge>
             </div>
-            <p className="text-4xl font-medium text-foreground leading-tight">{current.translation}</p>
+            <p className="text-3xl font-medium leading-tight text-foreground sm:text-4xl">{current.translation}</p>
             {current.usageNote && (
               <div className="bg-muted/30 rounded-xl p-3">
                 <span className="text-xs font-bold text-muted-foreground uppercase tracking-widest">Contexto</span>
@@ -293,7 +293,7 @@ export function WritingMode({ flashcards, onExit, onRemoveFromReview }: WritingM
               }}
               disabled={feedbackState === "correct" || feedbackState === "wrong-auto"}
               className={cn(
-                "w-full rounded-full border px-6 py-4 text-center text-2xl font-medium bg-card outline-none transition-colors",
+                "w-full rounded-full border bg-card px-5 py-3 text-center text-xl font-medium outline-none transition-colors sm:px-6 sm:py-4 sm:text-2xl",
                 "placeholder:text-muted-foreground/40 placeholder:font-normal placeholder:text-xl",
                 "disabled:cursor-not-allowed",
                 feedbackState === "idle" &&
@@ -304,7 +304,7 @@ export function WritingMode({ flashcards, onExit, onRemoveFromReview }: WritingM
               )}
             />
             <Button
-              className="w-full h-14 text-lg font-bold"
+              className="h-12 w-full text-base font-bold sm:h-14 sm:text-lg"
               onClick={handleSubmit}
               disabled={
                 !inputValue.trim() ||

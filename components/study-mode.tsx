@@ -203,14 +203,14 @@ export function StudyMode({ flashcards, folderName, onExit, onMarkForReview }: S
       .filter(([id]) => !reviewedWords.has(id))
 
     return (
-      <div className="fixed inset-0 z-50 bg-white dark:bg-slate-950 flex flex-col items-center justify-center p-6">
-        <div className="max-w-md w-full text-center space-y-8">
+      <div className="fixed inset-0 z-50 flex flex-col items-center justify-center bg-white p-4 dark:bg-slate-950 sm:p-6">
+        <div className="w-full max-w-md space-y-6 text-center sm:space-y-8">
           <div className="size-24 rounded-full bg-primary/10 border border-primary/20 flex items-center justify-center mx-auto">
             <Trophy className="size-12 text-primary" />
           </div>
 
           <div className="space-y-2">
-            <h2 className="text-4xl font-black text-slate-900 dark:text-white uppercase tracking-tighter">
+            <h2 className="text-3xl font-black uppercase tracking-tighter text-slate-900 dark:text-white sm:text-4xl">
               Sessão Concluída!
             </h2>
             <p className="text-slate-500 dark:text-slate-400 font-medium">
@@ -218,7 +218,7 @@ export function StudyMode({ flashcards, folderName, onExit, onMarkForReview }: S
             </p>
           </div>
 
-          <div className="grid grid-cols-2 gap-4">
+          <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 sm:gap-4">
             <div className="bg-slate-50 dark:bg-white/5 border border-slate-200 dark:border-white/10 rounded-2xl p-6">
               <div className="text-4xl font-black text-primary">{totalKnown}</div>
               <div className="text-xs font-bold text-slate-500 uppercase tracking-widest mt-1">Acertos</div>
@@ -293,9 +293,9 @@ export function StudyMode({ flashcards, folderName, onExit, onMarkForReview }: S
 
   // --- Tela principal de estudo ---
   return (
-    <div className="fixed inset-0 z-50 bg-background dark:bg-slate-900 flex flex-col">
+    <div className="fixed inset-0 z-50 flex flex-col bg-background dark:bg-slate-900">
       {/* Header */}
-      <div className="flex items-center justify-between px-6 py-4 border-b border-border dark:border-white/10">
+      <div className="flex items-center justify-between gap-2 border-b border-border px-3 py-3 dark:border-white/10 sm:px-6 sm:py-4">
         <div className="flex items-center gap-3">
           <Button
             variant="ghost"
@@ -315,7 +315,7 @@ export function StudyMode({ flashcards, folderName, onExit, onMarkForReview }: S
         </div>
 
         {/* Progress bar */}
-        <div className="flex-1 mx-8">
+        <div className="mx-2 flex-1 sm:mx-8">
           <div className="h-1.5 bg-muted dark:bg-white/10 rounded-full overflow-hidden">
             <div
               className="h-full bg-success rounded-full transition-all duration-500"
@@ -324,17 +324,17 @@ export function StudyMode({ flashcards, folderName, onExit, onMarkForReview }: S
           </div>
         </div>
 
-        <span className="text-sm font-semibold text-muted-foreground dark:text-white/70">
+        <span className="text-xs font-semibold text-muted-foreground dark:text-white/70 sm:text-sm">
           {totalKnown}/{totalCards}
         </span>
       </div>
 
       {/* Card area */}
-      <div className="flex-1 flex items-center justify-center p-6 bg-slate-50 dark:bg-slate-950/50">
+      <div className="flex flex-1 items-center justify-center bg-slate-50 p-3 pb-[calc(env(safe-area-inset-bottom)+0.75rem)] dark:bg-slate-950/50 sm:p-6">
         {current && (
           <div
             className={cn(
-              "w-full max-w-lg transition-all",
+              "w-full max-w-xl transition-all",
               animationsEnabled ? "duration-350" : "duration-0",
               animating && direction === "right" && "translate-x-32 rotate-12 opacity-0",
               animating && direction === "left" && "-translate-x-32 -rotate-12 opacity-0"
@@ -342,7 +342,7 @@ export function StudyMode({ flashcards, folderName, onExit, onMarkForReview }: S
           >
             {/* Flashcard */}
             <div
-              className="perspective-1000 h-[450px] cursor-pointer select-none"
+              className="perspective-1000 h-[62vh] min-h-[360px] max-h-[450px] cursor-pointer select-none sm:h-[450px]"
               onClick={() => !animating && setIsFlipped((f) => !f)}
             >
               <div
@@ -353,7 +353,7 @@ export function StudyMode({ flashcards, folderName, onExit, onMarkForReview }: S
                 )}
               >
                 {/* Front */}
-                <div className="surface-card surface-card-elevated interactive-lift absolute inset-0 backface-hidden rounded-[26px] bg-card p-8 flex flex-col">
+                <div className="surface-card surface-card-elevated interactive-lift absolute inset-0 flex flex-col rounded-[22px] bg-card p-5 backface-hidden sm:rounded-[26px] sm:p-8">
                   <div className="flex items-center justify-between">
                     <div className="flex gap-2 items-center">
                       <Badge className={cn("text-xs font-medium border-0", partOfSpeechColors[current.partOfSpeech || "noun"])}>
@@ -379,7 +379,7 @@ export function StudyMode({ flashcards, folderName, onExit, onMarkForReview }: S
                   </div>
 
                   <div className="flex-1 flex flex-col items-center justify-center space-y-4">
-                    <h2 className="text-6xl font-medium text-foreground tracking-tight text-center">
+                    <h2 className="text-center text-4xl font-medium tracking-tight text-foreground sm:text-6xl">
                       {current.word}
                     </h2>
                   </div>
@@ -388,7 +388,7 @@ export function StudyMode({ flashcards, folderName, onExit, onMarkForReview }: S
                 </div>
 
                 {/* Back */}
-                <div className="surface-card surface-card-elevated interactive-lift absolute inset-0 backface-hidden rotate-y-180 rounded-[26px] bg-card p-8 flex flex-col overflow-hidden">
+                <div className="surface-card surface-card-elevated interactive-lift absolute inset-0 flex flex-col overflow-hidden rounded-[22px] bg-card p-5 backface-hidden rotate-y-180 sm:rounded-[26px] sm:p-8">
                   <div className="flex items-center justify-between mb-4">
                     <div className="flex gap-2 items-center">
                       <Badge className={cn("text-xs font-medium border-0", partOfSpeechColors[current.partOfSpeech || "noun"])}>
@@ -413,8 +413,8 @@ export function StudyMode({ flashcards, folderName, onExit, onMarkForReview }: S
                     </Button>
                   </div>
 
-                  <div className="flex-1 space-y-6 overflow-y-auto pr-1 scrollbar-hide">
-                    <p className="text-4xl font-medium text-foreground border-b border-border/50 pb-2">{current.translation}</p>
+                  <div className="flex-1 space-y-5 overflow-y-auto pr-1 scrollbar-hide sm:space-y-6">
+                    <p className="border-b border-border/50 pb-2 text-2xl font-medium text-foreground sm:text-4xl">{current.translation}</p>
                     {includeUsageNote && !!current.usageNote && (
                       <div className="bg-muted/30 rounded-xl p-4">
                         <span className="text-xs font-bold text-muted-foreground uppercase tracking-widest">
@@ -426,7 +426,7 @@ export function StudyMode({ flashcards, folderName, onExit, onMarkForReview }: S
                       </div>
                     )}
 
-                    <div className="grid grid-cols-2 gap-4">
+                    <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 sm:gap-4">
                       <ClassifiedWordList words={current.synonyms} label="Sinônimos" maxCount={synonymsLevel} />
                       <ClassifiedWordList words={current.antonyms} label="Antônimos" maxCount={synonymsLevel} />
                     </div>
@@ -505,7 +505,7 @@ export function StudyMode({ flashcards, folderName, onExit, onMarkForReview }: S
                           </Button>
                         </div>
                         {showConjugations && (
-                          <div className="grid grid-cols-2 gap-3 text-[11px]">
+                          <div className="grid grid-cols-1 gap-2 text-[11px] sm:grid-cols-2 sm:gap-3">
                             <div className="flex flex-col bg-muted/20 p-2 rounded-lg">
                               <span className="text-primary font-bold text-[9px] uppercase">Simple Present</span>
                               <span className="text-foreground font-medium">{current.conjugations.simplePresent || "n/a"}</span>
@@ -542,11 +542,11 @@ export function StudyMode({ flashcards, folderName, onExit, onMarkForReview }: S
             </div>
 
             {/* Action buttons — always visible */}
-            <div className="flex gap-4 mt-8">
+            <div className="mt-5 flex gap-3 sm:mt-8 sm:gap-4">
               <Button
                 size="lg"
                 variant="outline"
-                className="flex-1 h-16 text-lg font-bold border-destructive/20 text-destructive hover:bg-destructive/10"
+                className="h-12 flex-1 border-destructive/20 text-base font-bold text-destructive hover:bg-destructive/10 sm:h-16 sm:text-lg"
                 onClick={() => advance(false)}
                 disabled={animating}
               >
@@ -556,7 +556,7 @@ export function StudyMode({ flashcards, folderName, onExit, onMarkForReview }: S
 
               <Button
                 size="lg"
-                className="flex-1 h-16 text-lg font-bold bg-success hover:bg-success/90 text-white"
+                className="h-12 flex-1 bg-success text-base font-bold text-white hover:bg-success/90 sm:h-16 sm:text-lg"
                 onClick={() => advance(true)}
                 disabled={animating}
               >

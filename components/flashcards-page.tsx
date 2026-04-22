@@ -224,10 +224,10 @@ export function FlashcardsPage() {
     <div className="w-full">
 
       {/* ── Hero Section ─────────────────────────────────────── */}
-      <div className="mb-10 flex flex-col items-center gap-5 pt-4">
+      <div className="mb-8 flex flex-col items-center gap-4 pt-2 sm:mb-10 sm:gap-5 sm:pt-4">
 
         {/* Brand watermark title */}
-        <h1 className="select-none text-[52px] font-light leading-none tracking-[-0.04em] text-foreground/20">
+        <h1 className="select-none text-[clamp(2.2rem,11vw,3.25rem)] font-light leading-none tracking-[-0.04em] text-foreground/20">
           VocabLab
         </h1>
 
@@ -259,10 +259,10 @@ export function FlashcardsPage() {
       </div>
 
       {/* Control Bar */}
-      <div className="flex items-center gap-2">
+      <div className="flex flex-col gap-2 md:flex-row md:items-center">
 
         {/* Left: folder segmented pill */}
-        <div className="segmented-control min-w-0 flex-1 overflow-x-auto">
+        <div className="segmented-control no-scrollbar min-w-0 flex-1 overflow-x-auto pb-1">
           <Button
             variant="ghost"
             size="sm"
@@ -376,7 +376,7 @@ export function FlashcardsPage() {
         </div>
 
         {/* Right: action cluster */}
-        <div className="flex shrink-0 items-center gap-1.5">
+        <div className="flex w-full shrink-0 items-center justify-end gap-1.5 md:w-auto">
           <Button
             variant="ghost"
             size="icon-sm"
@@ -396,7 +396,7 @@ export function FlashcardsPage() {
                     Estudar revisão
                   </Button>
                 </DialogTrigger>
-                <DialogContent className="sm:max-w-sm">
+                <DialogContent className="max-w-[92vw] sm:max-w-sm">
                   <DialogHeader>
                     <DialogTitle>Escolha o modo de estudo</DialogTitle>
                     <DialogDescription>Como você quer revisar suas {reviewFlashcards.length} palavras pendentes?</DialogDescription>
@@ -454,7 +454,7 @@ export function FlashcardsPage() {
 
       {/* ── Stats Sheet ──────────────────────────────────────── */}
       <Sheet open={isStatsOpen} onOpenChange={setIsStatsOpen}>
-        <SheetContent side="right" className="w-72 sm:w-80 p-0">
+        <SheetContent side="right" className="w-[88vw] max-w-sm p-0 sm:w-80">
           <SheetHeader className="border-b border-border/50 px-5 pb-4 pt-5">
             <SheetTitle className="flex items-center gap-2 text-[15px]">
               <BarChart2 className="size-4 text-primary" />
@@ -521,7 +521,7 @@ export function FlashcardsPage() {
           </div>
         ) : (
           <div className="space-y-4">
-            <div className="flex items-center gap-3">
+            <div className="flex flex-wrap items-center gap-2 sm:gap-3">
               <p className="text-[12px] text-muted-foreground/70">
                 {displayedFlashcards.length}{" "}
                 {displayedFlashcards.length === 1 ? "palavra" : "palavras"}
@@ -568,7 +568,7 @@ export function FlashcardsPage() {
             {/* key={layout} resets card flip state on layout change */}
             <div key={layout} className={cn(
               "grid gap-4",
-              layout === "grid" && "sm:grid-cols-2 lg:grid-cols-3",
+              layout === "grid" && "grid-cols-1 sm:grid-cols-2 lg:grid-cols-3",
               layout === "list" && "grid-cols-1",
               layout === "compact" && "grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5"
             )}>

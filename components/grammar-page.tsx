@@ -573,7 +573,7 @@ export function GrammarPage() {
     const { done, total } = loadingProgress
     const pct = total > 0 ? Math.round((done / total) * 100) : 0
     return (
-      <div className="flex min-h-[60vh] flex-col items-center justify-center gap-6">
+      <div className="flex min-h-[60vh] flex-col items-center justify-center gap-6 px-3 text-center sm:px-0">
         <Loader2 className="size-8 animate-spin text-primary/60" />
         <p className="text-[14px] font-medium text-foreground/70">{loadingStatus}</p>
         {total > 0 && (
@@ -596,7 +596,7 @@ export function GrammarPage() {
     const total = questions.length
     const pct = total > 0 ? Math.round((correctCount / total) * 100) : 0
     return (
-      <div className="flex min-h-[60vh] flex-col items-center justify-center gap-8">
+      <div className="flex min-h-[60vh] flex-col items-center justify-center gap-8 px-3 text-center sm:px-0">
         <Trophy className="size-16 text-amber-400" />
         <div className="text-center">
           <p className="text-[42px] font-light leading-none tracking-tight">{correctCount}/{total}</p>
@@ -614,7 +614,7 @@ export function GrammarPage() {
   if (phase === "quiz") {
     return (
       <div className="w-full">
-        <div className="mb-6 flex items-center justify-between">
+        <div className="mb-6 flex flex-wrap items-center justify-between gap-2">
           <Button variant="ghost" size="sm" onClick={handleNewSession} className="gap-2 text-muted-foreground">
             <RotateCcw className="size-3.5" />
             Nova sessao
@@ -635,7 +635,7 @@ export function GrammarPage() {
             if (!qs) return null
             const answered = qs.answeredLetter !== null
             return (
-              <div key={question.id} className="rounded-2xl border border-border/40 bg-card p-6 shadow-sm">
+              <div key={question.id} className="rounded-2xl border border-border/40 bg-card p-4 shadow-sm sm:p-6">
                 <p className="mb-2 text-[11px] font-semibold uppercase tracking-widest text-muted-foreground/50">
                   Questao {String(qIdx + 1).padStart(2, "0")}
                 </p>
@@ -735,7 +735,7 @@ export function GrammarPage() {
         )}
 
         <Dialog open={isSaveOpen} onOpenChange={setIsSaveOpen}>
-          <DialogContent className="max-w-sm">
+          <DialogContent className="max-w-[92vw] sm:max-w-sm">
             <DialogHeader>
               <DialogTitle>Salvar lista</DialogTitle>
             </DialogHeader>
@@ -771,8 +771,8 @@ export function GrammarPage() {
   // idle
   return (
     <div className="w-full">
-      <div className="mb-10 flex flex-col items-center gap-2 pt-4">
-        <h1 className="select-none text-[52px] font-light leading-none tracking-[-0.04em] text-foreground/20">
+      <div className="mb-8 flex flex-col items-center gap-2 pt-2 sm:mb-10 sm:pt-4">
+        <h1 className="select-none text-[clamp(2.2rem,11vw,3.25rem)] font-light leading-none tracking-[-0.04em] text-foreground/20">
           Grammar Lab
         </h1>
         <p className="text-[13px] text-muted-foreground/60">Questoes no estilo EFOMM EN AFA</p>
@@ -785,7 +785,7 @@ export function GrammarPage() {
         </div>
       )}
 
-      <div className="rounded-2xl border border-border/40 bg-card p-6 shadow-sm">
+      <div className="rounded-2xl border border-border/40 bg-card p-4 shadow-sm sm:p-6">
         <div className="mb-4 flex items-center justify-between">
           <h2 className="text-[14px] font-medium text-foreground">Selecione os topicos</h2>
           <button type="button" onClick={() => setShowAdvanced((p) => !p)} className="flex items-center gap-1 text-[12px] text-muted-foreground transition-colors hover:text-foreground">
@@ -832,8 +832,8 @@ export function GrammarPage() {
               </button>
             ))}
           </div>
-          <div className="ml-auto">
-            <Button onClick={handleGenerate} disabled={!selectedTopics.length} className="gap-2">
+          <div className="w-full sm:ml-auto sm:w-auto">
+            <Button onClick={handleGenerate} disabled={!selectedTopics.length} className="w-full gap-2 sm:w-auto">
               <Sparkles className="size-4" />
               Gerar {questionCount} Questoes
             </Button>
@@ -843,7 +843,7 @@ export function GrammarPage() {
 
       {(folders.length > 0 || lists.some((l) => !l.folderId)) && (
         <div className="mt-5">
-          <div className="segmented-control overflow-x-auto">
+          <div className="segmented-control no-scrollbar overflow-x-auto pb-1">
             {folders.map((folder) => {
               const isExpanded = expandedFolderId === folder.id
               const count = lists.filter((l) => l.folderId === folder.id).length
@@ -936,7 +936,7 @@ export function GrammarPage() {
       )}
 
       <Dialog open={isFolderDialogOpen} onOpenChange={setIsFolderDialogOpen}>
-        <DialogContent className="max-w-xs">
+        <DialogContent className="max-w-[92vw] sm:max-w-xs">
           <DialogHeader>
             <DialogTitle>Nova pasta</DialogTitle>
           </DialogHeader>

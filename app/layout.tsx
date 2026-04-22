@@ -55,7 +55,7 @@ export default function RootLayout({
           disableTransitionOnChange
         >
           <Header />
-          <main className="page-fade mx-auto w-full max-w-[1150px] px-4 sm:px-6 pb-12 pt-[112px] md:pb-16">
+          <main className="page-fade mx-auto w-full max-w-[1150px] px-3 pb-10 pt-[96px] sm:px-6 sm:pb-12 sm:pt-[112px] md:pb-16">
             {children}
           </main>
           <Analytics />
