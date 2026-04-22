@@ -210,129 +210,193 @@ export function FlashcardCard({ flashcard, onDelete, onCreateFromAlternative, on
   // List Layout
   if (layout === "list") {
     return (
-      <Card className="surface-card surface-card-elevated interactive-lift flex flex-col justify-between gap-4 p-4 sm:flex-row sm:items-center">
-        <div className="flex flex-col min-w-0 flex-1">
-          <h3 className="text-lg font-medium text-foreground leading-tight truncate">
-            {flashcard.word}
-          </h3>
-          <div className="flex items-center gap-2 min-w-0">
-            <p className="text-sm text-muted-foreground truncate flex-1">
-              {flashcard.translation}
-            </p>
-            <Button
-              variant="ghost"
-              size="icon"
-              className="size-7 shrink-0"
-              onClick={() => setEditOpen(true)}
-              title="Editar tradução"
-            >
-              <Pencil className="size-3.5" />
-            </Button>
-          </div>
-        </div>
-
-        <div className="flex items-center justify-end gap-3 shrink-0">
-          <div className="flex flex-wrap justify-end items-center gap-2">
-            <Badge
-              variant="outline"
-              className={cn("text-[10px] h-5 border-0", partOfSpeechColors[partOfSpeech])}
-            >
-              {partOfSpeechLabels[partOfSpeech]}
-            </Badge>
-            {flashcard.verbType && (
-              <Badge variant="outline" className="ghost-tag h-5 bg-primary/10 text-[9px] uppercase tracking-wider text-primary border-0">
-                {flashcard.verbType}
-              </Badge>
-            )}
-          </div>
-
-          <div className="flex items-center gap-2">
-          <Button
-            variant="ghost"
-            size="icon"
-            className="size-8"
-            onClick={() => speak(flashcard.word)}
-          >
-            <Volume2 className="size-4" />
-          </Button>
-          <Button
-            variant="ghost"
-            size="icon"
-            className="size-8"
-            onClick={() => setIsFlipped(!isFlipped)}
-          >
-            <Rotate3D className={cn("size-4 transition-transform", isFlipped && "rotate-180")} />
-          </Button>
-          {onDelete && (
-            <Button
-              variant="ghost"
-              size="icon"
-              className="size-8 text-destructive hover:text-destructive"
-              onClick={() => onDelete(flashcard.id)}
-            >
-              <Trash2 className="size-4" />
-            </Button>
-          )}
-          </div>
-        </div>
-
-        {isFlipped && (
-          <div className={cn(
-            "w-full mt-4 pt-4 border-t border-border grid sm:grid-cols-2 gap-4 animate-in fade-in slide-in-from-top-2",
-            animationsEnabled ? "duration-300" : "duration-0"
-          )}>
-            <div className="space-y-2">
-              <ClassifiedWordList words={flashcard.synonyms} label="Sinônimos" maxCount={synonymsLevel} />
-              <ClassifiedWordList words={flashcard.antonyms} label="Antônimos" maxCount={synonymsLevel} />
-              <div>
-                <span className="text-xs font-medium text-muted-foreground">Exemplo:</span>
-                <p className="text-xs text-foreground italic">{flashcard.example}</p>
-                {flashcard.exampleTranslation && (
-                  <div className="mt-1">
-                    <button
-                      className="inline-flex items-center gap-1 text-[10px] font-medium text-primary/70 hover:text-primary transition-colors"
-                      onClick={(e) => { e.stopPropagation(); setShowExampleTranslation((v) => !v) }}
-                    >
-                      <Languages className="size-3" />
-                      {showExampleTranslation ? "Ocultar tradução" : "Traduzir frase"}
-                    </button>
-                    {showExampleTranslation && (
-                      <p className="text-[10px] text-muted-foreground mt-0.5 leading-snug">
-                        {flashcard.exampleTranslation}
-                      </p>
-                    )}
-                  </div>
+      <>
+        <Card
+          className="surface-card surface-card-elevated interactive-lift flex cursor-pointer flex-col justify-between gap-4 p-4"
+          onClick={() => setIsFlipped((value) => !value)}
+        >
+          <div className="flex items-start justify-between gap-4">
+            <div className="min-w-0 flex-1 space-y-2">
+              <div className="flex flex-wrap items-center gap-2">
+                <Badge
+                  variant="outline"
+                  className={cn("text-[10px] h-5 border-0", partOfSpeechColors[partOfSpeech])}
+                >
+                  {partOfSpeechLabels[partOfSpeech]}
+                </Badge>
+                {flashcard.verbType && (
+                  <Badge variant="outline" className="ghost-tag h-5 bg-primary/10 text-[9px] uppercase tracking-wider text-primary border-0">
+                    {flashcard.verbType}
+                  </Badge>
                 )}
               </div>
+              <h3 className="truncate text-lg font-medium leading-tight text-foreground sm:text-xl">
+                {flashcard.word}
+              </h3>
+              {!isFlipped && (
+                <p className="text-xs text-muted-foreground">
+                  Clique no card ou no botao de giro para ver a traducao.
+                </p>
+              )}
             </div>
-            {includeConjugations && flashcard.conjugations && (
-              <div className="bg-primary/5 rounded-lg p-3">
-                <div className="flex items-center justify-between mb-2">
-                  <span className="text-[10px] font-bold text-primary/70 uppercase">Verb Tenses</span>
+
+            <div className="flex shrink-0 items-center gap-1">
+              <Button
+                variant="ghost"
+                size="icon"
+                className="size-8"
+                onClick={(e) => {
+                  e.stopPropagation()
+                  speak(flashcard.word)
+                }}
+              >
+                <Volume2 className="size-4" />
+              </Button>
+              <Button
+                variant="ghost"
+                size="icon"
+                className="size-8"
+                onClick={(e) => {
+                  e.stopPropagation()
+                  setIsFlipped((value) => !value)
+                }}
+              >
+                <Rotate3D className={cn("size-4 transition-transform", isFlipped && "rotate-180")} />
+              </Button>
+              {onDelete && (
+                <Button
+                  variant="ghost"
+                  size="icon"
+                  className="size-8 text-destructive hover:text-destructive"
+                  onClick={(e) => {
+                    e.stopPropagation()
+                    onDelete(flashcard.id)
+                  }}
+                >
+                  <Trash2 className="size-4" />
+                </Button>
+              )}
+            </div>
+          </div>
+
+          {isFlipped && (
+            <div className={cn(
+              "grid w-full gap-4 border-t border-border pt-4 animate-in fade-in slide-in-from-top-2 sm:grid-cols-2",
+              animationsEnabled ? "duration-300" : "duration-0"
+            )}>
+              <div className="space-y-3">
+                <div className="flex items-start justify-between gap-2">
+                  <p className="min-w-0 flex-1 text-lg font-medium leading-snug text-foreground">
+                    {flashcard.translation}
+                  </p>
                   <Button
                     variant="ghost"
-                    size="sm"
-                    className="h-6 px-2 text-[10px] font-bold text-primary hover:bg-primary/10 hover:text-primary"
-                    onClick={() => setShowConjugations((v) => !v)}
+                    size="icon"
+                    className="size-8 shrink-0"
+                    onClick={(e) => {
+                      e.stopPropagation()
+                      setEditOpen(true)
+                    }}
+                    title="Editar tradução"
                   >
-                    {showConjugations ? "Ocultar" : "Mostrar"}
+                    <Pencil className="size-4" />
                   </Button>
                 </div>
-                {showConjugations && (
-                  <div className="grid grid-cols-2 gap-x-4 gap-y-1 text-[10px]">
-                    <div className="flex justify-between gap-2"><span className="opacity-60 shrink-0">Present</span><span className="truncate">{flashcard.conjugations.simplePresent}</span></div>
-                    <div className="flex justify-between gap-2"><span className="opacity-60 shrink-0">Past</span><span className="truncate">{flashcard.conjugations.simplePast}</span></div>
-                    <div className="flex justify-between gap-2"><span className="opacity-60 shrink-0">Pres. Cont.</span><span className="truncate">{flashcard.conjugations.presentContinuous}</span></div>
-                    <div className="flex justify-between gap-2"><span className="opacity-60 shrink-0">Past Cont.</span><span className="truncate">{flashcard.conjugations.pastContinuous}</span></div>
-                    <div className="flex justify-between gap-2"><span className="opacity-60 shrink-0">Pres. Perf.</span><span className="truncate">{flashcard.conjugations.presentPerfect}</span></div>
-                    <div className="flex justify-between gap-2"><span className="opacity-60 shrink-0">Past Perf.</span><span className="truncate">{flashcard.conjugations.pastPerfect}</span></div>
-                  </div>
-                )}
+                <ClassifiedWordList words={flashcard.synonyms} label="Sinônimos" maxCount={synonymsLevel} />
+                <ClassifiedWordList words={flashcard.antonyms} label="Antônimos" maxCount={synonymsLevel} />
+                <div>
+                  <span className="text-xs font-medium text-muted-foreground">Exemplo:</span>
+                  <p className="text-xs text-foreground italic">{flashcard.example}</p>
+                  {flashcard.exampleTranslation && (
+                    <div className="mt-1">
+                      <button
+                        className="inline-flex items-center gap-1 text-[10px] font-medium text-primary/70 transition-colors hover:text-primary"
+                        onClick={(e) => {
+                          e.stopPropagation()
+                          setShowExampleTranslation((v) => !v)
+                        }}
+                      >
+                        <Languages className="size-3" />
+                        {showExampleTranslation ? "Ocultar tradução" : "Traduzir frase"}
+                      </button>
+                      {showExampleTranslation && (
+                        <p className="mt-0.5 text-[10px] leading-snug text-muted-foreground">
+                          {flashcard.exampleTranslation}
+                        </p>
+                      )}
+                    </div>
+                  )}
+                </div>
               </div>
-            )}
-          </div>
-        )}
-      </Card>
+              {includeConjugations && flashcard.conjugations && (
+                <div className="rounded-lg bg-primary/5 p-3">
+                  <div className="mb-2 flex items-center justify-between">
+                    <span className="text-[10px] font-bold uppercase text-primary/70">Verb Tenses</span>
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      className="h-6 px-2 text-[10px] font-bold text-primary hover:bg-primary/10 hover:text-primary"
+                      onClick={(e) => {
+                        e.stopPropagation()
+                        setShowConjugations((v) => !v)
+                      }}
+                    >
+                      {showConjugations ? "Ocultar" : "Mostrar"}
+                    </Button>
+                  </div>
+                  {showConjugations && (
+                    <div className="grid grid-cols-2 gap-x-4 gap-y-1 text-[10px]">
+                      <div className="flex justify-between gap-2"><span className="shrink-0 opacity-60">Present</span><span className="truncate">{flashcard.conjugations.simplePresent}</span></div>
+                      <div className="flex justify-between gap-2"><span className="shrink-0 opacity-60">Past</span><span className="truncate">{flashcard.conjugations.simplePast}</span></div>
+                      <div className="flex justify-between gap-2"><span className="shrink-0 opacity-60">Pres. Cont.</span><span className="truncate">{flashcard.conjugations.presentContinuous}</span></div>
+                      <div className="flex justify-between gap-2"><span className="shrink-0 opacity-60">Past Cont.</span><span className="truncate">{flashcard.conjugations.pastContinuous}</span></div>
+                      <div className="flex justify-between gap-2"><span className="shrink-0 opacity-60">Pres. Perf.</span><span className="truncate">{flashcard.conjugations.presentPerfect}</span></div>
+                      <div className="flex justify-between gap-2"><span className="shrink-0 opacity-60">Past Perf.</span><span className="truncate">{flashcard.conjugations.pastPerfect}</span></div>
+                    </div>
+                  )}
+                </div>
+              )}
+            </div>
+          )}
+        </Card>
+
+        <Dialog open={editOpen} onOpenChange={(o) => !editBusy && setEditOpen(o)}>
+          <DialogContent className="max-w-[92vw] sm:max-w-md">
+            <DialogHeader>
+              <DialogTitle>Editar tradução</DialogTitle>
+              <DialogDescription>
+                Ao salvar, a IA recalcula sinônimos, antônimos, exemplo, contexto e outras formas para condizer com a nova tradução.
+              </DialogDescription>
+            </DialogHeader>
+            <div className="space-y-2">
+              <p className="text-xs text-muted-foreground">
+                {flashcard.word} ({flashcard.partOfSpeech})
+              </p>
+              <Input
+                value={translationDraft}
+                onChange={(e) => setTranslationDraft(e.target.value)}
+                placeholder="Ex: a bebida"
+                disabled={editBusy}
+              />
+            </div>
+            <DialogFooter>
+              <Button variant="outline" onClick={() => setEditOpen(false)} disabled={editBusy}>
+                Cancelar
+              </Button>
+              <Button onClick={submitTranslationEdit} disabled={editBusy || !translationDraft.trim()}>
+                {editBusy ? (
+                  <>
+                    <Loader2 className="mr-2 size-4 animate-spin" />
+                    Salvando…
+                  </>
+                ) : (
+                  "Salvar e reanalisar"
+                )}
+              </Button>
+            </DialogFooter>
+          </DialogContent>
+        </Dialog>
+      </>
     )
   }
 

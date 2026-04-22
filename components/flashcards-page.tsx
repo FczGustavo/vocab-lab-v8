@@ -1,7 +1,7 @@
 "use client"
 
-import { useEffect, useState } from "react"
-import { BookOpen, Loader2, FolderPlus, Folder, FolderOpen, GraduationCap, TrendingUp, Target, Calendar, LayoutGrid, List, LayoutPanelTop, MoreVertical, Trash2, BookMarked, Pencil, Plus, BarChart2, X } from "lucide-react"
+import { useEffect, useMemo, useState } from "react"
+import { BookOpen, Loader2, FolderPlus, Folder, FolderOpen, GraduationCap, TrendingUp, Target, Calendar, LayoutGrid, List, LayoutPanelTop, MoreVertical, Trash2, BookMarked, Pencil, Plus, BarChart2, X, Search } from "lucide-react"
 import { useFlashcardsDB } from "@/hooks/use-flashcards-db"
 import { useGrammarProgress } from "@/hooks/use-grammar-progress"
 import { useGptModel } from "@/hooks/use-gpt-model"
@@ -49,6 +49,13 @@ import { toast } from "@/hooks/use-toast"
 import type { Flashcard } from "@/lib/types"
 import type { FlashcardAIResponse } from "@/lib/openai"
 
+function normalizeForSearch(value: string) {
+  return value
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .toLocaleLowerCase("pt-BR")
+}
+
 export function FlashcardsPage() {
   const { 
     flashcards, 
@@ -90,6 +97,7 @@ export function FlashcardsPage() {
   const [layout, setLayout] = useState<"grid" | "list" | "compact">("grid")
   const [isAddOpen, setIsAddOpen] = useState(false)
   const [isStatsOpen, setIsStatsOpen] = useState(false)
+  const [searchQuery, setSearchQuery] = useState("")
 
   useEffect(() => {
     if (isReviewFolderSelected && reviewFlashcards.length === 0) {
@@ -115,6 +123,31 @@ export function FlashcardsPage() {
   const effectiveStudyCards = studyCards ?? flashcards
   const displayedFlashcards = isReviewFolderSelected ? reviewFlashcards : flashcards
   const visibleReviewWords = studyStats.wordsToReview
+
+  const normalizedSearch = useMemo(
+    () => normalizeForSearch(searchQuery.trim()),
+    [searchQuery]
+  )
+
+  const filteredFlashcards = useMemo(() => {
+    if (!normalizedSearch) return displayedFlashcards
+
+    return displayedFlashcards.filter((flashcard) => {
+      const haystack = [
+        flashcard.word,
+        flashcard.translation,
+        flashcard.usageNote,
+        flashcard.example,
+        ...(flashcard.alternativeForms || []).flatMap((form) => [form.word, form.translation]),
+      ]
+        .filter(Boolean)
+        .join(" ")
+      
+      const normalizedHaystack = normalizeForSearch(haystack)
+
+      return normalizedHaystack.includes(normalizedSearch)
+    })
+  }, [displayedFlashcards, normalizedSearch])
 
   const createCardFromAlternative = async (base: Flashcard, form: Flashcard["alternativeForms"][number]) => {
     const inputWord = form.word || base.word
@@ -259,10 +292,11 @@ export function FlashcardsPage() {
       </div>
 
       {/* Control Bar */}
-      <div className="flex flex-col gap-2 md:flex-row md:items-center">
+      <div className="flex flex-col gap-2 md:flex-row md:items-center md:justify-between">
 
         {/* Left: folder segmented pill */}
-        <div className="segmented-control no-scrollbar min-w-0 flex-1 overflow-x-auto pb-1">
+        <div className="flex min-h-9 min-w-0 flex-1 items-center">
+        <div className="segmented-control no-scrollbar min-w-0 flex-1 overflow-x-auto">
           <Button
             variant="ghost"
             size="sm"
@@ -374,15 +408,16 @@ export function FlashcardsPage() {
             </DialogContent>
           </Dialog>
         </div>
+        </div>
 
         {/* Right: action cluster */}
-        <div className="flex w-full shrink-0 items-center justify-end gap-1.5 md:w-auto">
+        <div className="flex min-h-9 w-full shrink-0 items-center justify-end gap-1.5 md:w-auto">
           <Button
             variant="ghost"
             size="icon-sm"
             title="Ver Progresso"
             onClick={() => setIsStatsOpen(true)}
-            className="ghost-filter size-8"
+            className="ghost-filter size-8 self-center"
           >
             <BarChart2 className="size-3.5" />
           </Button>
@@ -470,13 +505,13 @@ export function FlashcardsPage() {
                   { icon: Target, label: "Acertos na 1ª", value: studyStats.totalCorrectFirstTry, tone: "text-success/70" },
                   { icon: TrendingUp, label: "Precisão", value: `${studyStats.averageAccuracy}%`, tone: "text-primary/70" },
                 ].map((stat) => (
-                  <div key={stat.label} className="stat-bento flex-col items-start gap-2">
+                  <div key={stat.label} className="stat-bento min-h-[112px] flex-col items-start justify-between gap-3 px-4 py-3">
                     <div className="flex size-7 items-center justify-center rounded-md bg-primary/10">
                       <stat.icon className={cn("size-3.5", stat.tone)} />
                     </div>
-                    <div>
-                      <p className="text-2xl font-bold leading-none tracking-[-0.03em]">{stat.value}</p>
-                      <p className="mt-1 text-[10px] uppercase tracking-[0.07em] text-muted-foreground">{stat.label}</p>
+                    <div className="space-y-1">
+                      <p className="text-2xl font-bold leading-none tracking-[-0.03em] tabular-nums">{stat.value}</p>
+                      <p className="text-[10px] uppercase tracking-[0.07em] text-muted-foreground">{stat.label}</p>
                     </div>
                   </div>
                 ))}
@@ -521,17 +556,45 @@ export function FlashcardsPage() {
           </div>
         ) : (
           <div className="space-y-4">
-            <div className="flex flex-wrap items-center gap-2 sm:gap-3">
-              <p className="text-[12px] text-muted-foreground/70">
-                {displayedFlashcards.length}{" "}
-                {displayedFlashcards.length === 1 ? "palavra" : "palavras"}
+            <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+              <div className={cn(
+                "flex min-w-0 items-center gap-2 rounded-full border border-border/50 bg-background/80 px-3 py-2 shadow-sm",
+                layout === "list" && "w-full",
+                layout === "grid" && "w-full sm:w-[calc((100%-1rem)/2)] lg:w-[calc((100%-2rem)/3)]",
+                layout === "compact" && "w-full sm:w-[calc((100%-1rem)/2)] lg:w-[calc((100%-2rem)/4)] xl:w-[calc((100%-4rem)/5)]"
+              )}>
+                <Search className="size-4 shrink-0 text-muted-foreground/60" />
+                <Input
+                  value={searchQuery}
+                  onChange={(e) => setSearchQuery(e.target.value)}
+                  placeholder="Buscar por palavra"
+                  className="h-auto border-0 bg-transparent px-0 py-0 text-sm shadow-none focus-visible:ring-0"
+                />
+                {searchQuery && (
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    size="icon-sm"
+                    className="size-6 shrink-0 rounded-full"
+                    onClick={() => setSearchQuery("")}
+                    title="Limpar busca"
+                  >
+                    <X className="size-3" />
+                  </Button>
+                )}
+              </div>
+
+              <div className="flex flex-wrap items-center gap-2 sm:gap-3 sm:justify-end">
+                <p className="text-[12px] text-muted-foreground/70">
+                {filteredFlashcards.length}{" "}
+                {filteredFlashcards.length === 1 ? "palavra" : "palavras"}
                 {isReviewFolderSelected
                   ? " para revisar"
                   : selectedFolder
                   ? ` em "${selectedFolder.name}"`
                   : " no vocabulário"}
-              </p>
-              <div className="flex items-center rounded-lg bg-muted/30 p-0.5">
+                </p>
+                <div className="flex items-center rounded-lg bg-muted/30 p-0.5">
                 <Button
                   variant="ghost"
                   size="icon"
@@ -563,26 +626,39 @@ export function FlashcardsPage() {
                   <LayoutPanelTop className="size-3.5" />
                 </Button>
               </div>
+              </div>
             </div>
 
-            {/* key={layout} resets card flip state on layout change */}
-            <div key={layout} className={cn(
-              "grid gap-4",
-              layout === "grid" && "grid-cols-1 sm:grid-cols-2 lg:grid-cols-3",
-              layout === "list" && "grid-cols-1",
-              layout === "compact" && "grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5"
-            )}>
-              {displayedFlashcards.map((flashcard) => (
-                <FlashcardCard
-                  key={flashcard.id}
-                  flashcard={flashcard}
-                  onDelete={deleteFlashcard}
-                  onCreateFromAlternative={createCardFromAlternative}
-                  onUpdateFlashcard={updateFlashcard}
-                  layout={layout}
-                />
-              ))}
-            </div>
+            {normalizedSearch && filteredFlashcards.length === 0 ? (
+              <div className="flex flex-col items-center justify-center rounded-2xl border border-dashed border-border/60 px-6 py-12 text-center">
+                <Search className="mb-3 size-8 text-muted-foreground/50" />
+                <h3 className="text-base font-medium text-foreground">Nenhum card encontrado</h3>
+                <p className="mt-1 max-w-md text-sm text-muted-foreground">
+                  Tente buscar pela palavra em inglês, por uma tradução em português ou por outro termo relacionado.
+                </p>
+              </div>
+            ) : (
+              <>
+                {/* key={layout} resets card flip state on layout change */}
+                <div key={layout} className={cn(
+                  "grid gap-4",
+                  layout === "grid" && "grid-cols-1 sm:grid-cols-2 lg:grid-cols-3",
+                  layout === "list" && "grid-cols-1",
+                  layout === "compact" && "grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5"
+                )}>
+                  {filteredFlashcards.map((flashcard) => (
+                    <FlashcardCard
+                      key={flashcard.id}
+                      flashcard={flashcard}
+                      onDelete={deleteFlashcard}
+                      onCreateFromAlternative={createCardFromAlternative}
+                      onUpdateFlashcard={updateFlashcard}
+                      layout={layout}
+                    />
+                  ))}
+                </div>
+              </>
+            )}
           </div>
         )}
       </div>
