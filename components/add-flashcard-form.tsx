@@ -12,10 +12,19 @@ import { toast } from "@/hooks/use-toast"
 import type { Flashcard, PartOfSpeech } from "@/lib/types"
 import type { FlashcardAIResponse } from "@/lib/openai"
 
-function aiResponseToFlashcard(data: FlashcardAIResponse): Flashcard {
+function isExpandedAcronymInput(raw: string): boolean {
+  const normalized = raw.trim()
+  // Ex: "challenging water quality (cwq)"
+  return /^.+\s+\([a-z0-9]{2,}\)$/i.test(normalized)
+}
+
+function aiResponseToFlashcard(data: FlashcardAIResponse, sourceWord: string): Flashcard {
+  const typedWord = sourceWord.trim().replace(/\s+/g, " ")
+  const keepTypedWord = isExpandedAcronymInput(typedWord)
+
   return {
     id: crypto.randomUUID(),
-    word: data.normalizedWord.toLowerCase(),
+    word: keepTypedWord ? typedWord : data.normalizedWord.toLowerCase(),
     partOfSpeech: data.partOfSpeech as PartOfSpeech,
     translation: data.translation,
     usageNote: data.usageNote || "",
@@ -48,6 +57,7 @@ export function AddFlashcardForm({ onAdd, bare }: AddFlashcardFormProps) {
     includeAlternativeForms,
     includeUsageNote,
     efommMode,
+    includeMultipleTranslations,
   } = useAiPreferences()
   const [mode, setMode] = useState<"single" | "batch">("single")
   const [word, setWord] = useState("")
@@ -79,7 +89,14 @@ export function AddFlashcardForm({ onAdd, bare }: AddFlashcardFormProps) {
         body: JSON.stringify({
           word: word.trim(),
           model,
-          options: { synonymsLevel, includeConjugations, includeAlternativeForms, includeUsageNote, efommMode },
+          options: {
+            synonymsLevel,
+            includeConjugations,
+            includeAlternativeForms,
+            includeUsageNote,
+            efommMode,
+            includeMultipleTranslations,
+          },
         }),
       })
       if (!res.ok) {
@@ -88,7 +105,7 @@ export function AddFlashcardForm({ onAdd, bare }: AddFlashcardFormProps) {
       }
       const data: FlashcardAIResponse = await res.json()
 
-      const flashcard = aiResponseToFlashcard(data)
+      const flashcard = aiResponseToFlashcard(data, word)
 
       const success = await onAdd(flashcard)
       if (success) {
@@ -136,13 +153,20 @@ export function AddFlashcardForm({ onAdd, bare }: AddFlashcardFormProps) {
             body: JSON.stringify({
               word: w,
               model,
-              options: { synonymsLevel, includeConjugations, includeAlternativeForms, includeUsageNote, efommMode },
+              options: {
+                synonymsLevel,
+                includeConjugations,
+                includeAlternativeForms,
+                includeUsageNote,
+                efommMode,
+                includeMultipleTranslations,
+              },
             }),
           })
           if (!res.ok) throw new Error("Erro ao gerar")
           const data: FlashcardAIResponse = await res.json()
 
-          const flashcard = aiResponseToFlashcard(data)
+          const flashcard = aiResponseToFlashcard(data, w)
 
           const success = await onAdd(flashcard)
           if (success) added++

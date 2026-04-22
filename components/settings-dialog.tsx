@@ -53,6 +53,8 @@ export function SettingsDialog() {
     setIncludeUsageNote,
     efommMode,
     setEfommMode,
+    includeMultipleTranslations,
+    setIncludeMultipleTranslations,
   } = useAiPreferences()
   const { syncCode, setSyncCode, regenerate, isValid: isSyncCodeValid } = useSyncCode()
   const { allFlashcards, folders, importAllData } = useFlashcardsDB()
@@ -360,6 +362,17 @@ export function SettingsDialog() {
                     </div>
                     <Switch checked={includeUsageNote} onCheckedChange={setIncludeUsageNote} />
                   </div>
+
+                  <div className="flex items-center justify-between pt-1">
+                    <div className="space-y-0.5">
+                      <Label className="text-sm">Duas traduções</Label>
+                      <p className="text-[10px] text-muted-foreground">
+                        Se ativado, a IA pode retornar duas traduções separadas por “/”. Se desativado, retorna somente a melhor tradução.
+                      </p>
+                    </div>
+                    <Switch checked={includeMultipleTranslations} onCheckedChange={setIncludeMultipleTranslations} />
+                  </div>
+
                   <div className="flex items-center justify-between pt-1">
                     <div className="space-y-0.5">
                       <Label className="text-sm">Modo EFOMM (Marítimo)</Label>

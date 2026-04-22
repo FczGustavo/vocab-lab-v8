@@ -7,6 +7,7 @@ const INCLUDE_CONJUGATIONS_KEY = "vocablab_include_conjugations"
 const INCLUDE_ALTERNATIVE_FORMS_KEY = "vocablab_include_alternative_forms"
 const INCLUDE_USAGE_NOTE_KEY = "vocablab_include_usage_note"
 const EFOMM_MODE_KEY = "vocablab_efomm_mode"
+const INCLUDE_MULTIPLE_TRANSLATIONS_KEY = "vocablab_include_multiple_translations"
 
 export type SynonymsLevel = 0 | 1 | 2 | 3
 
@@ -23,6 +24,7 @@ export function useAiPreferences() {
   const [includeAlternativeForms, setIncludeAlternativeFormsState] = useState(true)
   const [includeUsageNote, setIncludeUsageNoteState] = useState(true)
   const [efommMode, setEfommModeState] = useState(false)
+  const [includeMultipleTranslations, setIncludeMultipleTranslationsState] = useState(false)
   const [isLoaded, setIsLoaded] = useState(false)
 
   useEffect(() => {
@@ -54,6 +56,11 @@ export function useAiPreferences() {
       setEfommModeState(savedEfomm === "true")
     }
 
+    const savedMultipleTranslations = localStorage.getItem(INCLUDE_MULTIPLE_TRANSLATIONS_KEY)
+    if (savedMultipleTranslations !== null) {
+      setIncludeMultipleTranslationsState(savedMultipleTranslations === "true")
+    }
+
     setIsLoaded(true)
   }, [])
 
@@ -83,6 +90,11 @@ export function useAiPreferences() {
     localStorage.setItem(EFOMM_MODE_KEY, String(value))
   }, [])
 
+  const setIncludeMultipleTranslations = useCallback((value: boolean) => {
+    setIncludeMultipleTranslationsState(value)
+    localStorage.setItem(INCLUDE_MULTIPLE_TRANSLATIONS_KEY, String(value))
+  }, [])
+
   return {
     synonymsLevel,
     setSynonymsLevel,
@@ -94,6 +106,8 @@ export function useAiPreferences() {
     setIncludeUsageNote,
     efommMode,
     setEfommMode,
+    includeMultipleTranslations,
+    setIncludeMultipleTranslations,
     isLoaded,
   }
 }

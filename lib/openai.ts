@@ -50,6 +50,24 @@ function normalizeTranslationText(value: unknown): string {
     .join(" / ")
 }
 
+function normalizeTranslationByPreference(value: unknown, includeMultipleTranslations: boolean): string {
+  const normalized = normalizeTranslationText(value)
+  if (!normalized.includes("/")) return normalized
+
+  const chunks = normalized
+    .split("/")
+    .map((item) => item.trim())
+    .filter(Boolean)
+
+  if (chunks.length === 0) return ""
+
+  if (!includeMultipleTranslations) {
+    return chunks[0]
+  }
+
+  return chunks.slice(0, 2).join(" / ")
+}
+
 function normalizePartOfSpeech(value: unknown, fallback: string = "noun"): string {
   const normalized = asTrimmedString(value).toLowerCase()
   return VALID_PARTS_OF_SPEECH.includes(normalized as (typeof VALID_PARTS_OF_SPEECH)[number])
@@ -188,6 +206,7 @@ function normalizeFlashcardResponse(
   options: {
     includeConjugations: boolean
     includeAlternativeForms: boolean
+    includeMultipleTranslations: boolean
     synonymsLevel: number
     isCompoundOrAcronym: boolean
     targetPartOfSpeech?: string
@@ -198,7 +217,7 @@ function normalizeFlashcardResponse(
     ? normalizePartOfSpeech(options.targetPartOfSpeech)
     : undefined
   const partOfSpeech = targetPos ?? normalizePartOfSpeech(raw?.partOfSpeech)
-  const translation = normalizeTranslationText(raw?.translation)
+  const translation = normalizeTranslationByPreference(raw?.translation, options.includeMultipleTranslations)
   const usageNote = normalizeInlineWhitespace(raw?.usageNote)
   const example = normalizeInlineWhitespace(raw?.example)
   const exampleTranslation = normalizeInlineWhitespace(raw?.exampleTranslation)
@@ -386,6 +405,7 @@ export interface GenerateFlashcardOptions {
   includeConjugations?: boolean
   includeAlternativeForms?: boolean
   includeUsageNote?: boolean
+  includeMultipleTranslations?: boolean
   efommMode?: boolean
   targetPartOfSpeech?: string
 }
@@ -414,6 +434,7 @@ export async function generateFlashcardData(
   const includeConjugations = options?.includeConjugations ?? true
   const includeAlternativeForms = options?.includeAlternativeForms ?? true
   const includeUsageNote = options?.includeUsageNote ?? true
+  const includeMultipleTranslations = options?.includeMultipleTranslations ?? false
   const efommMode = options?.efommMode ?? false
   const targetPartOfSpeech = options?.targetPartOfSpeech
 
@@ -453,6 +474,10 @@ export async function generateFlashcardData(
    - Se a palavra não tiver nuance especial, retorne "".`
     : `3b. NOTA DE USO: NÃO gere notas de uso. Sempre retorne "usageNote": "".`
 
+  const translationInstruction = includeMultipleTranslations
+    ? `3. TRADUÇÃO (SECA E DIRETA): Forneça até 2 traduções mais comuns em português, separadas por barra (/).`
+    : `3. TRADUÇÃO (SECA E DIRETA): Forneça EXATAMENTE 1 tradução principal em português (SEM barra).`
+
   const alternativeFormsInstruction = includeAlternativeForms && !isCompoundOrAcronym
     ? `7. FORMAS ALTERNATIVAS (Derivações e Conversões): SEMPRE QUE POSSÍVEL, force a inclusão de até 2 formas derivadas comuns no Inglês Americano. 
    - TRAVA DE EXPRESSÕES: Se a sua palavra final contiver ESPAÇOS, ABORTE esta regra e retorne "alternativeForms": [] obrigatoriamente.
@@ -491,7 +516,7 @@ Siga estes passos para gerar dados de estudo:
 2. CLASSE GRAMATICAL ("partOfSpeech"): Classifique OBRIGATORIAMENTE usando APENAS as classes do JSON. 
    - Retorne "acronym" para siglas. 
    - Retorne "phrase" APENAS para expressões com mais de uma palavra SEPARADAS POR ESPAÇO.
-3. TRADUÇÃO (SECA E DIRETA): Forneça 1 ou 2 traduções mais comuns em português, separadas por barra (/).
+${translationInstruction}
    - REGRA DE OURO: PROIBIDO incluir parênteses, explicações, contextos ou frases dentro do campo de tradução (NÃO faça: "ofuscamento (em relação a algo maior)").
    - PROIBIDO usar meta-definições ou frases ("o ato de...", "ficar menor que..."). A tradução deve ser a palavra equivalente, não o significado dela.
    - IMPORTANTE (artigos): Se for "noun" ou "phrase", SEMPRE inclua o artigo (ex: "a proa", "o porto").
@@ -554,6 +579,7 @@ REGRAS CRÍTICAS DE VERBOS:
   return normalizeFlashcardResponse(raw, word, {
     includeConjugations,
     includeAlternativeForms,
+    includeMultipleTranslations,
     synonymsLevel,
     isCompoundOrAcronym,
     targetPartOfSpeech,
