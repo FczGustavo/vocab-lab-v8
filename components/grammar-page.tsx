@@ -441,7 +441,7 @@ export function GrammarPage() {
         const aiRes = await fetch("/api/ai/grammar-question", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ topicLabel, subtopics, questionType: qType, model, userWords }),
+          body: JSON.stringify({ topicLabel, subtopics, questionType: qType, userWords }),
         })
         if (!aiRes.ok) {
           const json = await aiRes.json().catch(() => ({}))
