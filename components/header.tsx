@@ -35,7 +35,7 @@ export function Header() {
             </span>
           </Link>
 
-          <nav className="no-scrollbar flex min-w-0 items-center gap-1 overflow-x-auto rounded-xl bg-muted/40 p-1">
+          <nav className="no-scrollbar flex min-w-0 items-center gap-1 overflow-x-auto rounded-lg bg-muted/40 p-1 dark:bg-zinc-800/30">
             {navItems.map((item) => {
               const isActive = pathname === item.href
               return (
@@ -43,10 +43,10 @@ export function Header() {
                   key={item.href}
                   href={item.href}
                   className={cn(
-                    "flex shrink-0 items-center gap-2 rounded-full px-3 py-1.5 text-[13px] font-medium tracking-[-0.01em] transition-all sm:px-3.5 sm:text-[14px]",
+                    "flex shrink-0 items-center gap-2 rounded-lg px-3 py-1.5 text-[13px] font-medium tracking-[-0.01em] transition-all sm:px-3.5 sm:text-[14px]",
                     isActive
-                      ? "bg-primary/15 text-primary font-semibold"
-                      : "text-muted-foreground hover:bg-background/50 hover:text-foreground"
+                      ? "bg-primary/15 text-primary font-semibold dark:bg-primary/20 dark:text-primary"
+                      : "text-muted-foreground hover:bg-background/50 hover:text-foreground dark:hover:bg-zinc-700/40 dark:hover:text-zinc-100"
                   )}
                 >
                   <item.icon className="size-4" />

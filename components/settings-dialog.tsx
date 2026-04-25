@@ -34,7 +34,7 @@ import { useFlashcardsDB } from "@/hooks/use-flashcards-db"
 import { toast } from "@/hooks/use-toast"
 import { cn } from "@/lib/utils"
 
-type ColorPalette = "blue" | "beige" | "violet"
+type ColorPalette = "blue" | "beige" | "violet" | "gray"
 
 const COLOR_PALETTE_KEY = "vocablab_color_palette"
 
@@ -69,13 +69,13 @@ export function SettingsDialog() {
 
   useEffect(() => {
     const savedPalette = localStorage.getItem(COLOR_PALETTE_KEY) as ColorPalette | null
-    const initial = savedPalette === "beige" || savedPalette === "violet" || savedPalette === "blue" ? savedPalette : "blue"
+    const initial = savedPalette === "beige" || savedPalette === "violet" || savedPalette === "blue" || savedPalette === "gray" ? savedPalette : "blue"
     setPalette(initial)
   }, [])
 
   useEffect(() => {
     const root = document.documentElement
-    root.classList.remove("palette-blue", "palette-beige", "palette-violet")
+    root.classList.remove("palette-blue", "palette-beige", "palette-violet", "palette-gray")
     root.classList.add(`palette-${palette}`)
     localStorage.setItem(COLOR_PALETTE_KEY, palette)
   }, [palette])
@@ -260,7 +260,7 @@ export function SettingsDialog() {
                     <Sparkles className="size-4 text-primary" />
                     Tema de Cores
                   </h4>
-                  <div className="grid grid-cols-1 gap-1 bg-muted p-1 sm:grid-cols-3 sm:gap-0 sm:rounded-lg">
+                  <div className="grid grid-cols-2 gap-1 bg-muted p-1 sm:grid-cols-4 sm:gap-0 sm:rounded-lg">
                     <Button
                       variant={palette === "blue" ? "secondary" : "ghost"}
                       size="sm"
@@ -284,6 +284,14 @@ export function SettingsDialog() {
                       onClick={() => setPalette("violet")}
                     >
                       Violeta
+                    </Button>
+                    <Button
+                      variant={palette === "gray" ? "secondary" : "ghost"}
+                      size="sm"
+                      className="flex-1 h-8"
+                      onClick={() => setPalette("gray")}
+                    >
+                      Cinza
                     </Button>
                   </div>
                 </div>

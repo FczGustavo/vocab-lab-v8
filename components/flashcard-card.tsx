@@ -43,15 +43,15 @@ const partOfSpeechLabels: Record<PartOfSpeech, string> = {
 }
 
 const partOfSpeechColors: Record<PartOfSpeech, string> = {
-  verb: "ghost-tag bg-blue-500/10 text-blue-700 dark:bg-blue-400/10 dark:text-blue-300",
-  noun: "ghost-tag bg-emerald-500/10 text-emerald-700 dark:bg-emerald-400/10 dark:text-emerald-300",
-  adjective: "ghost-tag bg-amber-500/10 text-amber-700 dark:bg-amber-400/10 dark:text-amber-300",
-  adverb: "ghost-tag bg-purple-500/10 text-purple-700 dark:bg-purple-400/10 dark:text-purple-300",
-  preposition: "ghost-tag bg-rose-500/10 text-rose-700 dark:bg-rose-400/10 dark:text-rose-300",
-  conjunction: "ghost-tag bg-cyan-500/10 text-cyan-700 dark:bg-cyan-400/10 dark:text-cyan-300",
-  interjection: "ghost-tag bg-orange-500/10 text-orange-700 dark:bg-orange-400/10 dark:text-orange-300",
-  phrase: "ghost-tag bg-teal-500/10 text-teal-700 dark:bg-teal-400/10 dark:text-teal-300",
-  acronym: "ghost-tag bg-indigo-500/10 text-indigo-700 dark:bg-indigo-400/10 dark:text-indigo-300",
+  verb: "ghost-tag bg-blue-500/10 text-blue-700 dark:bg-blue-400/15 dark:text-blue-300",
+  noun: "ghost-tag bg-emerald-500/10 text-emerald-700 dark:bg-emerald-400/15 dark:text-emerald-300",
+  adjective: "ghost-tag bg-amber-500/10 text-amber-700 dark:bg-amber-400/15 dark:text-amber-300",
+  adverb: "ghost-tag bg-purple-500/10 text-purple-700 dark:bg-purple-400/15 dark:text-purple-300",
+  preposition: "ghost-tag bg-rose-500/10 text-rose-700 dark:bg-rose-400/15 dark:text-rose-300",
+  conjunction: "ghost-tag bg-cyan-500/10 text-cyan-700 dark:bg-cyan-400/15 dark:text-cyan-300",
+  interjection: "ghost-tag bg-orange-500/10 text-orange-700 dark:bg-orange-400/15 dark:text-orange-300",
+  phrase: "ghost-tag bg-teal-500/10 text-teal-700 dark:bg-teal-400/15 dark:text-teal-300",
+  acronym: "ghost-tag bg-indigo-500/10 text-indigo-700 dark:bg-indigo-400/15 dark:text-indigo-300",
 }
 
 function ClassifiedWordList({ 
@@ -80,10 +80,10 @@ function ClassifiedWordList({
           const tag = t === "literal" ? "lit" : t === "slang" ? "slng" : "fig"
           const tone =
             t === "literal"
-              ? "bg-blue-500/10 text-blue-700 dark:bg-blue-500/20 dark:text-blue-300"
+              ? "bg-blue-500/10 text-blue-700 dark:bg-blue-500/15 dark:text-blue-300"
               : t === "slang"
-                ? "bg-amber-500/10 text-amber-800 dark:bg-amber-500/20 dark:text-amber-200"
-                : "bg-purple-500/10 text-purple-700 dark:bg-purple-500/20 dark:text-purple-300"
+                ? "bg-amber-500/10 text-amber-800 dark:bg-amber-500/15 dark:text-amber-200"
+                : "bg-purple-500/10 text-purple-700 dark:bg-purple-500/15 dark:text-purple-300"
 
           return (
             <Badge
@@ -225,7 +225,7 @@ export function FlashcardCard({ flashcard, onDelete, onCreateFromAlternative, on
                   {partOfSpeechLabels[partOfSpeech]}
                 </Badge>
                 {flashcard.verbType && (
-                  <Badge variant="outline" className="ghost-tag h-5 bg-primary/10 text-[9px] uppercase tracking-wider text-primary border-0">
+                  <Badge variant="outline" className="ghost-tag h-5 bg-primary/10 text-[9px] uppercase tracking-wider text-primary border-0 dark:bg-primary/15">
                     {flashcard.verbType}
                   </Badge>
                 )}

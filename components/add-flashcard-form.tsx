@@ -201,7 +201,7 @@ export function AddFlashcardForm({ onAdd, bare }: AddFlashcardFormProps) {
           {/* Pill bar */}
           <div className={cn(
             "group flex items-center gap-1.5 rounded-full pl-4 pr-1 py-1 ring-1 transition-all focus-within:ring-primary/15",
-            bare ? "bg-transparent ring-0" : "bg-muted/30 ring-border/20"
+            bare ? "bg-transparent ring-0" : "bg-muted/30 ring-border/20 dark:bg-white/5 dark:ring-white/8"
           )}>
             {/* Input or batch label */}
             {mode === "single" ? (

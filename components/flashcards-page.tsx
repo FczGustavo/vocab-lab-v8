@@ -558,7 +558,7 @@ export function FlashcardsPage() {
           <div className="space-y-4">
             <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
               <div className={cn(
-                "flex min-w-0 items-center gap-2 rounded-full border border-border/50 bg-background/80 px-3 py-2 shadow-sm",
+                "flex min-w-0 items-center gap-2 rounded-full border border-border/50 bg-background/80 px-3 py-2 shadow-sm dark:bg-white/5 dark:border-white/8",
                 layout === "list" && "w-full",
                 layout === "grid" && "w-full sm:w-[calc((100%-1rem)/2)] lg:w-[calc((100%-2rem)/3)]",
                 layout === "compact" && "w-full sm:w-[calc((100%-1rem)/2)] lg:w-[calc((100%-2rem)/4)] xl:w-[calc((100%-4rem)/5)]"
