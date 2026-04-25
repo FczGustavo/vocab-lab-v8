@@ -549,7 +549,7 @@ export function FlashcardCard({ flashcard, onDelete, onCreateFromAlternative, on
                 <span className="text-[10px] font-bold text-muted-foreground uppercase tracking-widest">
                   Contexto
                 </span>
-                <p className="text-xs text-foreground mt-1 leading-snug">
+                <p className="mt-1 whitespace-pre-line text-xs leading-snug text-foreground">
                   {flashcard.usageNote}
                 </p>
               </div>

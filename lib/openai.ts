@@ -69,6 +69,86 @@ function normalizeTranslationByPreference(value: unknown, includeMultipleTransla
   return chunks.slice(0, 2).join(" / ")
 }
 
+function normalizePtBrOrthography(value: unknown): string {
+  let text = normalizeInlineWhitespace(value)
+  if (!text) return ""
+
+  const replacements: Array<[RegExp, string]> = [
+    [/\bidéia\b/gi, "ideia"],
+    [/\bidéias\b/gi, "ideias"],
+    [/\bassembléia\b/gi, "assembleia"],
+    [/\bassembléias\b/gi, "assembleias"],
+    [/\bplatéia\b/gi, "plateia"],
+    [/\bheróico\b/gi, "heroico"],
+    [/\bheróicos\b/gi, "heroicos"],
+    [/\bjóia\b/gi, "joia"],
+    [/\bjóias\b/gi, "joias"],
+    [/\bparanóia\b/gi, "paranoia"],
+    [/\bparanóias\b/gi, "paranoias"],
+    [/\bbóia\b/gi, "boia"],
+    [/\bbóias\b/gi, "boias"],
+    [/\bjibóia\b/gi, "jiboia"],
+    [/\bjibóias\b/gi, "jiboias"],
+    [/\bvôo\b/gi, "voo"],
+    [/\bvôos\b/gi, "voos"],
+    [/\benjôo\b/gi, "enjoo"],
+    [/\benjôos\b/gi, "enjoos"],
+    [/\bcrêem\b/gi, "creem"],
+    [/\bdêem\b/gi, "deem"],
+    [/\blêem\b/gi, "leem"],
+    [/\bvêem\b/gi, "veem"],
+    [/\bpára\b/gi, "para"],
+  ]
+
+  for (const [pattern, replacement] of replacements) {
+    text = text.replace(pattern, replacement)
+  }
+
+  // Remove trema remnants from pre-accord spellings in PT-BR text.
+  text = text.replace(/ü/g, "u").replace(/Ü/g, "U")
+
+  return text
+}
+
+function normalizePtBrOrthographyMultiline(value: unknown): string {
+  const raw = asTrimmedString(value)
+  if (!raw) return ""
+
+  const normalizedLines = raw
+    .replace(/\r\n/g, "\n")
+    .split("\n")
+    .map((line) => normalizeInlineWhitespace(line))
+    .filter(Boolean)
+
+  const normalized = normalizePtBrOrthography(normalizedLines.join("\n")).replace(/\s*\n\s*/g, "\n")
+
+  // If the model returns block labels in a single line, force line breaks before each label.
+  const labelPatterns = [
+    "Uso principal",
+    "Nuance",
+    "Estrutura comum",
+    "Estrutura",
+    "Intensificador",
+    "Atenuador",
+    "Preferencia / Alternativa",
+    "Preferência / Alternativa",
+    "Como Adjetivo",
+    "Como Adverbio",
+    "Como Advérbio",
+    "Como Substantivo",
+    "Como Verbo",
+  ]
+
+  let withBreaks = normalized
+  for (const label of labelPatterns) {
+    const escapedLabel = label.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")
+    const regex = new RegExp(`\\s+(${escapedLabel}:)`, "gi")
+    withBreaks = withBreaks.replace(regex, "\n$1")
+  }
+
+  return withBreaks
+}
+
 function normalizePartOfSpeech(value: unknown, fallback: string = "noun"): string {
   const normalized = asTrimmedString(value).toLowerCase()
   return VALID_PARTS_OF_SPEECH.includes(normalized as (typeof VALID_PARTS_OF_SPEECH)[number])
@@ -109,6 +189,97 @@ function normalizeLexicalRelations(raw: unknown, maxItems: number) {
   return normalized
 }
 
+const DERIVATIONAL_SUFFIXES = [
+  "ly",
+  "ness",
+  "ment",
+  "tion",
+  "sion",
+  "ity",
+  "al",
+  "ial",
+  "ic",
+  "ical",
+  "ous",
+  "ive",
+  "able",
+  "ible",
+  "ful",
+  "less",
+  "er",
+  "est",
+  "ed",
+  "ing",
+  "ise",
+  "ize",
+  "ify",
+  "ism",
+  "ist",
+] as const
+
+function buildDerivationalStems(word: string): string[] {
+  const lower = normalizeInlineWhitespace(word).toLowerCase()
+  if (!lower) return []
+
+  const stems = new Set<string>()
+  stems.add(lower)
+
+  if (lower.endsWith("y") && lower.length > 3) {
+    stems.add(lower.slice(0, -1))
+    stems.add(`${lower.slice(0, -1)}i`)
+  }
+
+  if (lower.endsWith("e") && lower.length > 3) {
+    stems.add(lower.slice(0, -1))
+  }
+
+  for (const suffix of ["ly", "er", "est", "ed", "ing"]) {
+    if (lower.endsWith(suffix) && lower.length > suffix.length + 2) {
+      stems.add(lower.slice(0, -suffix.length))
+    }
+  }
+
+  return [...stems].filter((stem) => stem.length >= 3)
+}
+
+function isLikelyDerivation(mainWord: string, candidateWord: string): boolean {
+  const main = normalizeInlineWhitespace(mainWord).toLowerCase()
+  const candidate = normalizeInlineWhitespace(candidateWord).toLowerCase()
+  if (!main || !candidate) return false
+  if (main === candidate) return false
+
+  const lengthDiff = Math.abs(candidate.length - main.length)
+  if (lengthDiff <= 1 && !candidate.startsWith(main) && !main.startsWith(candidate)) {
+    return false
+  }
+
+  if (candidate.startsWith(main)) {
+    const suffix = candidate.slice(main.length)
+    return DERIVATIONAL_SUFFIXES.includes(suffix as (typeof DERIVATIONAL_SUFFIXES)[number])
+  }
+
+  const stems = buildDerivationalStems(main)
+  for (const stem of stems) {
+    if (!candidate.includes(stem)) continue
+
+    if (candidate.startsWith(stem)) {
+      const suffix = candidate.slice(stem.length)
+      if (DERIVATIONAL_SUFFIXES.includes(suffix as (typeof DERIVATIONAL_SUFFIXES)[number])) {
+        return true
+      }
+    }
+
+    if (candidate.endsWith(stem)) {
+      const prefix = candidate.slice(0, candidate.length - stem.length)
+      if (prefix === "un" || prefix === "in" || prefix === "im" || prefix === "dis" || prefix === "non") {
+        return true
+      }
+    }
+  }
+
+  return false
+}
+
 function normalizeAlternativeForms(
   raw: unknown,
   mainWord: string,
@@ -136,11 +307,12 @@ function normalizeAlternativeForms(
       if (word.toLowerCase() === mainWord.toLowerCase()) return null
       if (word.includes(" ")) return null
       if (partOfSpeech === "phrase" || partOfSpeech === "acronym") return null
+      if (!isLikelyDerivation(mainWord, word)) return null
 
       return {
         word,
         partOfSpeech,
-        translation,
+        translation: normalizePtBrOrthography(translation),
         example,
       }
     })
@@ -218,10 +390,12 @@ function normalizeFlashcardResponse(
     ? normalizePartOfSpeech(options.targetPartOfSpeech)
     : undefined
   const partOfSpeech = targetPos ?? normalizePartOfSpeech(raw?.partOfSpeech)
-  const translation = normalizeTranslationByPreference(raw?.translation, options.includeMultipleTranslations)
-  const usageNote = normalizeInlineWhitespace(raw?.usageNote)
+  const translation = normalizePtBrOrthography(
+    normalizeTranslationByPreference(raw?.translation, options.includeMultipleTranslations)
+  )
+  const usageNote = normalizePtBrOrthographyMultiline(raw?.usageNote)
   const example = normalizeInlineWhitespace(raw?.example)
-  const exampleTranslation = normalizeInlineWhitespace(raw?.exampleTranslation)
+  const exampleTranslation = normalizePtBrOrthography(raw?.exampleTranslation)
 
   const maxRelations = options.synonymsLevel
   const synonyms = normalizeLexicalRelations(raw?.synonyms, maxRelations)
@@ -281,12 +455,12 @@ function normalizeRevisionResponse(
   }
 ): FlashcardRevisionResponse {
   return {
-    translation: normalizeTranslationText(raw?.translation),
-    usageNote: normalizeInlineWhitespace(raw?.usageNote),
+    translation: normalizePtBrOrthography(normalizeTranslationText(raw?.translation)),
+    usageNote: normalizePtBrOrthographyMultiline(raw?.usageNote),
     synonyms: normalizeLexicalRelations(raw?.synonyms, options.synonymsLevel),
     antonyms: normalizeLexicalRelations(raw?.antonyms, options.synonymsLevel),
     example: normalizeInlineWhitespace(raw?.example),
-    exampleTranslation: normalizeInlineWhitespace(raw?.exampleTranslation),
+    exampleTranslation: normalizePtBrOrthography(raw?.exampleTranslation),
     alternativeForms: normalizeAlternativeForms(
       raw?.alternativeForms,
       normalizeInlineWhitespace(options.word),
@@ -462,15 +636,21 @@ export async function generateFlashcardData(
     : `6. CONJUGAÇÕES: Defina "conjugations" null.`
 
   const usageNoteInstruction = includeUsageNote
-    ? `3b. NOTA DE USO / CONTEXTO (opcional): Seja ULTRA CONCISO e DIRETO (estilo flashcard, máximo de 1 a 2 frases curtas). 
+    ? `3b. NOTA DE USO / CONTEXTO (opcional): Seja ULTRA CONCISO e DIRETO (estilo flashcard, máximo de 2 a 4 linhas curtas). 
    - PROIBIDO usar introduções narrativas ou metalinguagem (NÃO escreva "A palavra X descreve...", "Diz-se quando...", "É comum em...").
-   - Escreva DIRETAMENTE a regra ou nuance em formato didático de bolso.
+   - Use FORMATAÇÃO EM BLOCOS, com QUEBRA DE LINHA, no padrão "Rótulo: conteúdo".
+   - Exemplo de formato aceito:
+     Uso principal: ...
+     Nuance: ...
+     Estrutura comum: ...
+   - Cada linha deve trazer apenas uma ideia objetiva.
    - Exemplos de estilo aceito:
      * might: "Indica possibilidade remota ou incerteza. Também atua como alternativa formal, polida e cautelosa a 'can' em perguntas, sugestões e pedidos."
      * dwarfing: "Efeito de fazer algo parecer minúsculo ou insignificante devido a um contraste de proporção."
      * challenging water quality or (CWQ): "Condição ambiental (alta turbidez, excesso de lama ou algas) que impede o funcionamento adequado do Sistema de Tratamento de Água de Lastro (BWMS), forçando a redução da velocidade da operação comercial do navio."
    - SE A PALAVRA FOR UMA SIGLA, OBRIGATORIAMENTE escreva o que as letras significam em inglês.
    - Explique a essência em PORTUGUÊS BRASILEIRO.
+  - Use ortografia do Português Brasileiro atual (Acordo Ortográfico vigente; ex.: "ideia", "assembleia", sem trema).
    - PROIBIDO dar "bronca" ou mencionar correções ortográficas que você ajustou.
    - Se a palavra não tiver nuance especial, retorne "".`
     : `3b. NOTA DE USO: NÃO gere notas de uso. Sempre retorne "usageNote": "".`
@@ -485,6 +665,8 @@ export async function generateFlashcardData(
    - PROIBIDO usar "partOfSpeech" = "phrase" ou "acronym" em "alternativeForms".
    - Cada "word" em "alternativeForms" deve ser UMA PALAVRA (sem espaços e sem sigla).
    - A classe gramatical ("partOfSpeech") DEVE ser diferente da principal.
+  - CADA ITEM DEVE ser uma derivação real e dicionarizada da mesma raiz da palavra principal.
+  - PROIBIDO incluir palavras apenas parecidas na escrita/pronúncia (ex.: "quite" x "quiet") ou palavras inventadas.
    - A "word" deve ser em INGLÊS.
    - Forneça uma tradução SECA e DIRETA EM PORTUGUÊS BRASILEIRO (OBRIGATÓRIO incluir o artigo se for substantivo).
    - Evite meta-definições ("o ato de...").
@@ -556,7 +738,11 @@ Retorne um JSON exato (MANTENHA AS CHAVES EM INGLÊS):
 
 REGRAS CRÍTICAS DE VERBOS:
   - Se NÃO for verbo: "_verbReasoning": "n/a", "verbType": null e "conjugations": null.
-   - Se FOR verbo: "_verbReasoning" decide. Se passado termina em -ed/-d (Yes), "verbType": "regular". Senão, "verbType": "irregular".`,
+  - Se FOR verbo: "_verbReasoning" decide. Se passado termina em -ed/-d (Yes), "verbType": "regular". Senão, "verbType": "irregular".
+
+REGRA CRÍTICA DE COERÊNCIA POR CLASSE GRAMATICAL:
+- A classe final em "partOfSpeech" governa TODO o card: "translation", "usageNote", "synonyms", "antonyms" e "example".
+- Se a palavra tiver outros usos em classes diferentes, NÃO misture no contexto principal. Mostre esses outros usos somente em "alternativeForms" (quando houver derivação real).`,
     },
     {
       role: "user",
@@ -616,14 +802,21 @@ export async function reviseFlashcardByTranslation(
    - PROIBIDO usar "partOfSpeech" = "phrase" ou "acronym".
    - Cada "word" deve ser UMA PALAVRA (sem espaços e sem sigla).
    - A classe gramatical deve ser diferente da classe principal.
+   - Cada item deve ser derivação real e dicionarizada da mesma raiz. NÃO invente palavras e NÃO use palavras apenas parecidas (ex.: "quite" x "quiet").
    - Forneça tradução SECA em PORTUGUÊS BRASILEIRO (com artigo para substantivos) e um exemplo em INGLÊS.
    - PROIBIDO meta-definições ("o ato de...").`
     : `Sempre retorne "alternativeForms": [].`
 
   const usageNoteInstruction = includeUsageNote
-    ? `NOTA DE USO (opcional): Seja ULTRA CONCISO e DIRETO AO PONTO (estilo flashcard, máx 1 a 2 frases curtas). 
+    ? `NOTA DE USO (opcional): Seja ULTRA CONCISO e DIRETO AO PONTO (estilo flashcard, máx 2 a 4 linhas curtas). 
    - PROIBIDO usar introduções narrativas (NÃO escreva "A palavra descreve..."). Vá direto para a regra.
+   - Use FORMATAÇÃO EM BLOCOS com QUEBRA DE LINHA, no padrão "Rótulo: conteúdo".
+   - Exemplo de formato aceito:
+     Uso principal: ...
+     Nuance: ...
+     Estrutura comum: ...
    - SE FOR SIGLA, escreva o que as letras significam em inglês.
+   - Use ortografia do Português Brasileiro atual (Acordo Ortográfico vigente; ex.: "ideia", "assembleia", sem trema).
    - Se não tiver nuance especial, retorne "".`
     : `NOTA DE USO: NÃO gere notas de uso. Sempre retorne "usageNote": "".`
 
@@ -652,6 +845,7 @@ Regras:
 - "translation" DEVE ser retornada exatamente como fornecida.
 - Sinônimos/antônimos (em inglês) DEVEM incluir um tipo: "literal" | "figurative" | "slang" | "abstract".
 - Fidelidade: Liste apenas sinônimos e exemplos que se encaixem perfeitamente nesse novo sentido.
+- A classe recebida é mandatória para todo o card. NÃO misture outros usos de classe gramatical diferente no contexto principal.
 
 Instrução de sinônimos/antônimos: ${synonymsInstruction}
 Instrução de nota de uso: ${usageNoteInstruction}

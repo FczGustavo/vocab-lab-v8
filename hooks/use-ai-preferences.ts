@@ -19,12 +19,12 @@ function clampSynonymsLevel(value: number): SynonymsLevel {
 }
 
 export function useAiPreferences() {
-  const [synonymsLevel, setSynonymsLevelState] = useState<SynonymsLevel>(2)
-  const [includeConjugations, setIncludeConjugationsState] = useState(true)
+  const [synonymsLevel, setSynonymsLevelState] = useState<SynonymsLevel>(0)
+  const [includeConjugations, setIncludeConjugationsState] = useState(false)
   const [includeAlternativeForms, setIncludeAlternativeFormsState] = useState(true)
   const [includeUsageNote, setIncludeUsageNoteState] = useState(true)
-  const [efommMode, setEfommModeState] = useState(false)
-  const [includeMultipleTranslations, setIncludeMultipleTranslationsState] = useState(false)
+  const [efommMode, setEfommModeState] = useState(true)
+  const [includeMultipleTranslations, setIncludeMultipleTranslationsState] = useState(true)
   const [isLoaded, setIsLoaded] = useState(false)
 
   useEffect(() => {

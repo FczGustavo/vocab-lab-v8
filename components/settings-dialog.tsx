@@ -345,7 +345,7 @@ export function SettingsDialog() {
                     <div className="space-y-0.5">
                       <Label className="text-sm">Conjugações de verbos</Label>
                       <p className="text-[10px] text-muted-foreground">
-                        Se desativado, a IA não gera tempos verbais para economizar tokens.
+                        Exibe os principais tempos verbais quando o card for da classe verbo.
                       </p>
                     </div>
                     <Switch checked={includeConjugations} onCheckedChange={setIncludeConjugations} />
@@ -355,7 +355,7 @@ export function SettingsDialog() {
                     <div className="space-y-0.5">
                       <Label className="text-sm">Outras formas</Label>
                       <p className="text-[10px] text-muted-foreground">
-                        Se desativado, a IA não gera “Outras formas” (ex.: verbo e substantivo) para economizar tokens.
+                        Gera variações derivadas válidas da mesma raiz (ex.: adjetivo, verbo, substantivo).
                       </p>
                     </div>
                     <Switch checked={includeAlternativeForms} onCheckedChange={setIncludeAlternativeForms} />
@@ -365,7 +365,7 @@ export function SettingsDialog() {
                     <div className="space-y-0.5">
                       <Label className="text-sm">Contexto</Label>
                       <p className="text-[10px] text-muted-foreground">
-                        Se desativado, a IA não gera a seção “Contexto” para economizar tokens.
+                        Mostra uma explicação curta e organizada em blocos para o uso da palavra.
                       </p>
                     </div>
                     <Switch checked={includeUsageNote} onCheckedChange={setIncludeUsageNote} />

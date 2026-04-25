@@ -49,6 +49,8 @@ import { toast } from "@/hooks/use-toast"
 import type { Flashcard } from "@/lib/types"
 import type { FlashcardAIResponse } from "@/lib/openai"
 
+const AI_SETTINGS_HINT_SEEN_KEY = "vocablab_ai_settings_hint_seen"
+
 function normalizeForSearch(value: string) {
   return value
     .normalize("NFD")
@@ -97,7 +99,20 @@ export function FlashcardsPage() {
   const [layout, setLayout] = useState<"grid" | "list" | "compact">("grid")
   const [isAddOpen, setIsAddOpen] = useState(false)
   const [isStatsOpen, setIsStatsOpen] = useState(false)
+  const [showAiSettingsHint, setShowAiSettingsHint] = useState(false)
   const [searchQuery, setSearchQuery] = useState("")
+
+  useEffect(() => {
+    const seen = localStorage.getItem(AI_SETTINGS_HINT_SEEN_KEY)
+    if (!seen) {
+      setShowAiSettingsHint(true)
+    }
+  }, [])
+
+  const dismissAiSettingsHint = () => {
+    localStorage.setItem(AI_SETTINGS_HINT_SEEN_KEY, "true")
+    setShowAiSettingsHint(false)
+  }
 
   useEffect(() => {
     if (isReviewFolderSelected && reviewFlashcards.length === 0) {
@@ -255,6 +270,19 @@ export function FlashcardsPage() {
 
   return (
     <div className="w-full">
+      <Dialog open={showAiSettingsHint} onOpenChange={(open) => !open && dismissAiSettingsHint()}>
+        <DialogContent className="max-w-[92vw] sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle>Personalize sua IA</DialogTitle>
+            <DialogDescription>
+              Você pode ajustar o comportamento da IA do seu jeito em Configurações, incluindo contexto, outras formas, traduções e modo EFOMM.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="flex justify-end">
+            <Button onClick={dismissAiSettingsHint}>Entendi</Button>
+          </div>
+        </DialogContent>
+      </Dialog>
 
       {/* ── Hero Section ─────────────────────────────────────── */}
       <div className="mb-8 flex flex-col items-center gap-4 pt-2 sm:mb-10 sm:gap-5 sm:pt-4">
