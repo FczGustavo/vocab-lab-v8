@@ -2,6 +2,7 @@ import type { Flashcard, GrammarExercise, GrammarQuestionOption } from "./types"
 
 const OPENROUTER_API_URL = "https://openrouter.ai/api/v1/chat/completions"
 export const DEFAULT_AI_MODEL = process.env.DEFAULT_AI_MODEL ?? "openai/gpt-5.4-nano"
+export const GRAMMAR_AI_MODEL = process.env.GRAMMAR_AI_MODEL ?? DEFAULT_AI_MODEL
 export const REVISOR_AI_MODEL = process.env.REVISOR_AI_MODEL ?? DEFAULT_AI_MODEL
 
 interface OpenRouterMessage {

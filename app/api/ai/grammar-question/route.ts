@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server"
-import { generateGrammarQuestion, evaluateGrammarQuestion, DEFAULT_AI_MODEL, REVISOR_AI_MODEL } from "@/lib/openai"
+import { generateGrammarQuestion, evaluateGrammarQuestion, GRAMMAR_AI_MODEL, REVISOR_AI_MODEL } from "@/lib/openai"
 
 export async function POST(req: Request) {
   try {
@@ -12,7 +12,7 @@ export async function POST(req: Request) {
       ? [body.subtopic]
       : []
     const questionType: "correct" | "incorrect" = body?.questionType ?? "correct"
-    const model: string = body?.model ?? DEFAULT_AI_MODEL
+    const model: string = body?.model ?? GRAMMAR_AI_MODEL
     const userWords: string[] | undefined = Array.isArray(body?.userWords) ? body.userWords : undefined
 
     if (!topicLabel) {
