@@ -83,6 +83,7 @@ export function FlashcardsPage() {
     includeConjugations,
     includeAlternativeForms,
     includeUsageNote,
+    contextDetailMode,
     efommMode,
   } = useAiPreferences()
 
@@ -180,7 +181,15 @@ export function FlashcardsPage() {
         body: JSON.stringify({
           word: inputWord,
           model,
-          options: { synonymsLevel, includeConjugations, includeAlternativeForms, includeUsageNote, efommMode, targetPartOfSpeech },
+          options: {
+            synonymsLevel,
+            includeConjugations,
+            includeAlternativeForms,
+            includeUsageNote,
+            contextMode: contextDetailMode,
+            efommMode,
+            targetPartOfSpeech,
+          },
         }),
       })
       if (!res.ok) {

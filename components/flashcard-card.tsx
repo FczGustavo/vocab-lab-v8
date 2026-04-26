@@ -1,7 +1,7 @@
 "use client"
 
 import { useEffect, useState } from "react"
-import { Trash2, Volume2, Pencil, Loader2, Languages, Rotate3D } from "lucide-react"
+import { Trash2, Volume2, Pencil, Loader2, Languages, Rotate3D, ChevronDown, ChevronUp } from "lucide-react"
 import { cn } from "@/lib/utils"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
@@ -21,6 +21,7 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog"
 import { Input } from "@/components/ui/input"
+import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible"
 
 interface FlashcardCardProps {
   flashcard: Flashcard
@@ -103,6 +104,56 @@ function ClassifiedWordList({
   )
 }
 
+function parseUsageNoteBlocks(note: string): Array<{ label: string | null; text: string }> {
+  const knownLabels = [
+    "Nuance",
+    "Outro uso",
+    "Estrutura comum",
+    "Estrutura",
+    "Uso principal",
+    "Intensificador",
+    "Atenuador",
+    "Preferência / Alternativa",
+    "Preferencia / Alternativa",
+    "Como Adjetivo",
+    "Como Advérbio",
+    "Como Adverbio",
+    "Como Substantivo",
+    "Como Verbo",
+  ]
+
+  const labelRegex = new RegExp(`\\s+(${knownLabels.map((label) => label.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")).join("|")}):`, "gi")
+
+  const normalized = note
+    .replace(/\r\n/g, "\n")
+    .replace(labelRegex, "\n$1:")
+    .trim()
+
+  if (!normalized) return []
+
+  return normalized
+    .split("\n")
+    .map((line) => line.trim())
+    .filter(Boolean)
+    .map((line) => {
+      const match = line.match(/^([^:]{2,40}:)\s*(.*)$/)
+      if (!match) return { label: null, text: line }
+      return {
+        label: match[1],
+        text: match[2] || "",
+      }
+    })
+    .reduce<Array<{ label: string | null; text: string }>>((acc, current) => {
+      const prev = acc[acc.length - 1]
+      if (prev && prev.label && !prev.text && !current.label) {
+        prev.text = current.text
+        return acc
+      }
+      acc.push(current)
+      return acc
+    }, [])
+}
+
 export function FlashcardCard({ flashcard, onDelete, onCreateFromAlternative, onUpdateFlashcard, layout = "grid" }: FlashcardCardProps) {
   const [isFlipped, setIsFlipped] = useState(false)
   const [showConjugations, setShowConjugations] = useState(false)
@@ -110,8 +161,9 @@ export function FlashcardCard({ flashcard, onDelete, onCreateFromAlternative, on
   const [editOpen, setEditOpen] = useState(false)
   const [translationDraft, setTranslationDraft] = useState("")
   const [editBusy, setEditBusy] = useState(false)
+  const [contextExpanded, setContextExpanded] = useState(false)
   const { enabled: animationsEnabled } = useAnimations()
-  const { synonymsLevel, includeConjugations, includeAlternativeForms, includeUsageNote, efommMode } = useAiPreferences()
+  const { synonymsLevel, includeConjugations, includeAlternativeForms, includeUsageNote, contextDetailMode, efommMode } = useAiPreferences()
   const { model } = useGptModel()
 
   const speak = (text: string) => {
@@ -121,6 +173,9 @@ export function FlashcardCard({ flashcard, onDelete, onCreateFromAlternative, on
   }
 
   const partOfSpeech = flashcard.partOfSpeech || "noun"
+  const usageBlocks = parseUsageNoteBlocks(flashcard.usageNote || "")
+  const hasContext = includeUsageNote && usageBlocks.length > 0
+  const hasExample = Boolean(flashcard.example?.trim())
   const alternativeForms = includeAlternativeForms
     ? (flashcard.alternativeForms || []).filter(
         (f) => f.translation && f.partOfSpeech && f.partOfSpeech !== partOfSpeech
@@ -165,6 +220,7 @@ export function FlashcardCard({ flashcard, onDelete, onCreateFromAlternative, on
             synonymsLevel,
             includeAlternativeForms,
             includeUsageNote,
+            contextMode: contextDetailMode,
           },
         }),
       })
@@ -304,30 +360,66 @@ export function FlashcardCard({ flashcard, onDelete, onCreateFromAlternative, on
                 </div>
                 <ClassifiedWordList words={flashcard.synonyms} label="Sinônimos" maxCount={synonymsLevel} />
                 <ClassifiedWordList words={flashcard.antonyms} label="Antônimos" maxCount={synonymsLevel} />
-                <div>
-                  <span className="text-xs font-medium text-muted-foreground">Exemplo:</span>
-                  <p className="text-xs text-foreground italic">{flashcard.example}</p>
-                  {flashcard.exampleTranslation && (
-                    <div className="mt-1">
-                      <button
-                        className="inline-flex items-center gap-1 text-[10px] font-medium text-primary/70 transition-colors hover:text-primary"
-                        onClick={(e) => {
-                          e.stopPropagation()
-                          setShowExampleTranslation((v) => !v)
-                        }}
-                      >
-                        <Languages className="size-3" />
-                        {showExampleTranslation ? "Ocultar tradução" : "Traduzir frase"}
-                      </button>
-                      {showExampleTranslation && (
-                        <p className="mt-0.5 text-[10px] leading-snug text-muted-foreground">
-                          {flashcard.exampleTranslation}
-                        </p>
-                      )}
-                    </div>
-                  )}
-                </div>
+                {hasExample && (
+                  <div>
+                    <span className="text-xs font-medium text-muted-foreground">Exemplo:</span>
+                    <p className="text-xs text-foreground italic">{flashcard.example}</p>
+                    {flashcard.exampleTranslation && (
+                      <div className="mt-1">
+                        <button
+                          className="inline-flex items-center gap-1 text-[10px] font-medium text-primary/70 transition-colors hover:text-primary"
+                          onClick={(e) => {
+                            e.stopPropagation()
+                            setShowExampleTranslation((v) => !v)
+                          }}
+                        >
+                          <Languages className="size-3" />
+                          {showExampleTranslation ? "Ocultar tradução" : "Traduzir frase"}
+                        </button>
+                        {showExampleTranslation && (
+                          <p className="mt-0.5 text-[10px] leading-snug text-muted-foreground">
+                            {flashcard.exampleTranslation}
+                          </p>
+                        )}
+                      </div>
+                    )}
+                  </div>
+                )}
               </div>
+              {hasContext && (
+                <div className="rounded-lg bg-muted/30 p-3">
+                  <Collapsible open={contextExpanded} onOpenChange={setContextExpanded}>
+                    <div className="flex items-center justify-between gap-2">
+                      <span className="text-[10px] font-bold text-muted-foreground uppercase tracking-widest">
+                        Contexto
+                      </span>
+                      <CollapsibleTrigger asChild>
+                        <button
+                          type="button"
+                          className="inline-flex items-center gap-1 text-[10px] font-semibold text-primary"
+                          onClick={(e) => e.stopPropagation()}
+                        >
+                          {contextExpanded ? "Recolher" : "Expandir"}
+                          {contextExpanded ? <ChevronUp className="size-3" /> : <ChevronDown className="size-3" />}
+                        </button>
+                      </CollapsibleTrigger>
+                    </div>
+
+                    <CollapsibleContent className="mt-2 space-y-2">
+                      <div className="space-y-1.5">
+                        {usageBlocks.map((block, idx) => (
+                          <div key={idx} className="text-xs leading-relaxed text-foreground">
+                            <p>
+                              {block.label ? <span className="mr-1 font-semibold text-primary">{block.label}</span> : null}
+                              <span>{block.text}</span>
+                            </p>
+                          </div>
+                        ))}
+                      </div>
+                    </CollapsibleContent>
+                  </Collapsible>
+                </div>
+              )}
               {includeConjugations && flashcard.conjugations && (
                 <div className="rounded-lg bg-primary/5 p-3">
                   <div className="mb-2 flex items-center justify-between">
@@ -422,9 +514,11 @@ export function FlashcardCard({ flashcard, onDelete, onCreateFromAlternative, on
               )}
             </div>
           </div>
-          <p className="text-xs text-muted-foreground italic leading-snug truncate">
-            {flashcard.example}
-          </p>
+          {hasExample && (
+            <p className="text-xs text-muted-foreground italic leading-snug truncate">
+              {flashcard.example}
+            </p>
+          )}
         </div>
 
         <div className={cn(
@@ -544,44 +638,70 @@ export function FlashcardCard({ flashcard, onDelete, onCreateFromAlternative, on
                 <Pencil className="size-4" />
               </Button>
             </div>
-            {includeUsageNote && !!flashcard.usageNote && (
+            {hasContext && (
               <div className="rounded-xl bg-muted/30 p-3">
-                <span className="text-[10px] font-bold text-muted-foreground uppercase tracking-widest">
-                  Contexto
-                </span>
-                <p className="mt-1 whitespace-pre-line text-xs leading-snug text-foreground">
-                  {flashcard.usageNote}
-                </p>
+                <Collapsible open={contextExpanded} onOpenChange={setContextExpanded}>
+                    <div className="flex items-center justify-between gap-2">
+                      <span className="text-[10px] font-bold text-muted-foreground uppercase tracking-widest">
+                        Contexto
+                      </span>
+                      <CollapsibleTrigger asChild>
+                        <button
+                          type="button"
+                          className="inline-flex items-center gap-1 text-[10px] font-semibold text-primary"
+                          onClick={(e) => e.stopPropagation()}
+                        >
+                          {contextExpanded ? "Recolher" : "Expandir"}
+                          {contextExpanded ? <ChevronUp className="size-3" /> : <ChevronDown className="size-3" />}
+                        </button>
+                      </CollapsibleTrigger>
+                    </div>
+
+                    <CollapsibleContent className="mt-2 space-y-2">
+                      <div className="space-y-1.5">
+                        {usageBlocks.map((block, idx) => (
+                          <div key={idx} className="text-xs leading-relaxed text-foreground">
+                            <p>
+                              {block.label ? <span className="mr-1 font-semibold text-primary">{block.label}</span> : null}
+                              <span>{block.text}</span>
+                            </p>
+                          </div>
+                        ))}
+                      </div>
+                    </CollapsibleContent>
+                </Collapsible>
               </div>
             )}
 
             <ClassifiedWordList words={flashcard.synonyms} label="Sinônimos" maxCount={synonymsLevel} />
             <ClassifiedWordList words={flashcard.antonyms} label="Antônimos" maxCount={synonymsLevel} />
 
-            <div>
-              <span className="text-xs font-medium text-muted-foreground">
-                Exemplo:
-              </span>
-              <p className="text-sm text-foreground italic mt-0.5">
-                {flashcard.example}
-              </p>
-              {flashcard.exampleTranslation && (
-                <div className="mt-1.5">
-                  <button
-                    className="inline-flex items-center gap-1 text-[11px] font-medium text-primary/70 hover:text-primary transition-colors"
-                    onClick={(e) => { e.stopPropagation(); setShowExampleTranslation((v) => !v) }}
-                  >
-                    <Languages className="size-3" />
-                    {showExampleTranslation ? "Ocultar tradução" : "Traduzir frase"}
-                  </button>
-                  {showExampleTranslation && (
-                    <p className="text-xs text-muted-foreground mt-0.5 leading-snug">
-                      {flashcard.exampleTranslation}
-                    </p>
-                  )}
-                </div>
-              )}
-            </div>
+            {hasExample && (
+              <div>
+                <span className="text-xs font-medium text-muted-foreground">
+                  Exemplo:
+                </span>
+                <p className="text-sm text-foreground italic mt-0.5">
+                  {flashcard.example}
+                </p>
+                {flashcard.exampleTranslation && (
+                  <div className="mt-1.5">
+                    <button
+                      className="inline-flex items-center gap-1 text-[11px] font-medium text-primary/70 hover:text-primary transition-colors"
+                      onClick={(e) => { e.stopPropagation(); setShowExampleTranslation((v) => !v) }}
+                    >
+                      <Languages className="size-3" />
+                      {showExampleTranslation ? "Ocultar tradução" : "Traduzir frase"}
+                    </button>
+                    {showExampleTranslation && (
+                      <p className="text-xs text-muted-foreground mt-0.5 leading-snug">
+                        {flashcard.exampleTranslation}
+                      </p>
+                    )}
+                  </div>
+                )}
+              </div>
+            )}
 
             {includeConjugations && flashcard.conjugations && (
               <div className="pt-2 border-t border-border/50">

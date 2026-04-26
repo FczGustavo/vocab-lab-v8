@@ -56,6 +56,7 @@ export function AddFlashcardForm({ onAdd, bare }: AddFlashcardFormProps) {
     includeConjugations,
     includeAlternativeForms,
     includeUsageNote,
+    contextDetailMode,
     efommMode,
     includeMultipleTranslations,
   } = useAiPreferences()
@@ -94,6 +95,7 @@ export function AddFlashcardForm({ onAdd, bare }: AddFlashcardFormProps) {
             includeConjugations,
             includeAlternativeForms,
             includeUsageNote,
+            contextMode: contextDetailMode,
             efommMode,
             includeMultipleTranslations,
           },
@@ -158,6 +160,7 @@ export function AddFlashcardForm({ onAdd, bare }: AddFlashcardFormProps) {
                 includeConjugations,
                 includeAlternativeForms,
                 includeUsageNote,
+                contextMode: contextDetailMode,
                 efommMode,
                 includeMultipleTranslations,
               },

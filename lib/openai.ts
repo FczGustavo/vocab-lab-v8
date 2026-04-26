@@ -42,6 +42,9 @@ function normalizeInlineWhitespace(value: unknown): string {
 
 function normalizeTranslationText(value: unknown): string {
   const normalized = normalizeInlineWhitespace(value)
+    .replace(/\s*\([^)]*\)\s*/g, " ")
+    .replace(/\s+/g, " ")
+    .trim()
   if (!normalized.includes("/")) return normalized
 
   return normalized
@@ -49,6 +52,61 @@ function normalizeTranslationText(value: unknown): string {
     .map((item) => item.trim())
     .filter(Boolean)
     .join(" / ")
+}
+
+function pickPrimaryTranslation(value: string): string {
+  const chunks = normalizeTranslationText(value)
+    .split("/")
+    .map((item) => item.trim())
+    .filter(Boolean)
+
+  return chunks[0] ?? ""
+}
+
+function isAcronymCandidate(value: string): boolean {
+  const token = normalizeInlineWhitespace(value)
+  if (!/^[A-Za-z]{2,8}$/.test(token)) return false
+
+  const lower = token.toLowerCase()
+  const vowels = (lower.match(/[aeiou]/g) ?? []).length
+  const hasTripleConsonant = /[bcdfghjklmnpqrstvwxyz]{3,}/i.test(token)
+
+  // Strong signal for lowercase acronyms such as oow, eta, bwms.
+  return vowels <= 2 || hasTripleConsonant
+}
+
+function inferPartOfSpeechWithAcronymFallback(params: {
+  originalWord: string
+  normalizedWord: string
+  rawPartOfSpeech: string
+  translation: string
+  usageNote: string
+}): { partOfSpeech: string; normalizedWord: string } {
+  const rawPos = normalizePartOfSpeech(params.rawPartOfSpeech)
+  const candidate = normalizeInlineWhitespace(params.originalWord)
+
+  if (rawPos === "acronym") {
+    return {
+      partOfSpeech: "acronym",
+      normalizedWord: normalizeInlineWhitespace(params.normalizedWord || candidate).toUpperCase(),
+    }
+  }
+
+  const note = normalizeInlineWhitespace(params.usageNote).toLowerCase()
+  const translation = normalizeInlineWhitespace(params.translation).toLowerCase()
+  const hasAcronymSignal = /(sigla|acr[oô]nimo|stands for|abrevia[cç][aã]o|abreviação)/i.test(note + " " + translation)
+
+  if (!isAcronymCandidate(candidate) || !hasAcronymSignal) {
+    return {
+      partOfSpeech: rawPos,
+      normalizedWord: normalizeInlineWhitespace(params.normalizedWord || candidate),
+    }
+  }
+
+  return {
+    partOfSpeech: "acronym",
+    normalizedWord: candidate.toUpperCase(),
+  }
 }
 
 function normalizeTranslationByPreference(value: unknown, includeMultipleTranslations: boolean): string {
@@ -67,6 +125,205 @@ function normalizeTranslationByPreference(value: unknown, includeMultipleTransla
   }
 
   return chunks.slice(0, 2).join(" / ")
+}
+
+function isLikelyPtBrAdverbialChunk(value: string): boolean {
+  const chunk = normalizeInlineWhitespace(value).toLowerCase()
+  if (!chunk) return false
+
+  const exactAdverbials = new Set([
+    "bem",
+    "bastante",
+    "muito",
+    "muito bem",
+    "totalmente",
+    "completamente",
+    "relativamente",
+    "um tanto",
+    "moderadamente",
+    "antes",
+    "preferencialmente",
+  ])
+
+  if (exactAdverbials.has(chunk)) return true
+
+  return /(mente)$/.test(chunk)
+}
+
+function guessPtBrTranslationKind(value: string):
+  | "verb"
+  | "noun_or_phrase"
+  | "adverb"
+  | "preposition"
+  | "conjunction"
+  | "interjection"
+  | "adjective"
+  | "unknown" {
+  const chunk = normalizeInlineWhitespace(value).toLowerCase()
+  if (!chunk) return "unknown"
+
+  const prepositions = new Set([
+    "a",
+    "ante",
+    "após",
+    "ate",
+    "até",
+    "com",
+    "contra",
+    "de",
+    "desde",
+    "em",
+    "entre",
+    "para",
+    "per",
+    "perante",
+    "por",
+    "sem",
+    "sob",
+    "sobre",
+    "tras",
+    "trás",
+  ])
+
+  const conjunctions = new Set([
+    "e",
+    "ou",
+    "mas",
+    "porque",
+    "pois",
+    "porem",
+    "porém",
+    "entretanto",
+    "todavia",
+    "logo",
+    "portanto",
+    "que",
+    "se",
+    "quando",
+    "embora",
+  ])
+
+  const interjections = new Set([
+    "ola",
+    "olá",
+    "opa",
+    "ei",
+    "uau",
+    "ah",
+    "oh",
+    "nossa",
+    "poxa",
+    "ixi",
+    "viva",
+  ])
+
+  if (prepositions.has(chunk)) return "preposition"
+  if (conjunctions.has(chunk)) return "conjunction"
+  if (interjections.has(chunk)) return "interjection"
+  if (isLikelyPtBrAdverbialChunk(chunk)) return "adverb"
+
+  if (/\b\w+(ar|er|ir)\b/.test(chunk) && !/\s/.test(chunk)) {
+    return "verb"
+  }
+
+  if (/^(o|a|os|as|um|uma|uns|umas)\b/.test(chunk) || /\s/.test(chunk)) {
+    return "noun_or_phrase"
+  }
+
+  return "adjective"
+}
+
+function isTranslationKindCompatibleWithPartOfSpeech(kind: string, partOfSpeech: string): boolean {
+  if (partOfSpeech === "verb") return kind === "verb"
+  if (partOfSpeech === "adverb") return kind === "adverb"
+  if (partOfSpeech === "preposition") return kind === "preposition"
+  if (partOfSpeech === "conjunction") return kind === "conjunction"
+  if (partOfSpeech === "interjection") return kind === "interjection"
+  if (partOfSpeech === "noun") return kind === "noun_or_phrase"
+  if (partOfSpeech === "phrase" || partOfSpeech === "acronym") {
+    return kind === "noun_or_phrase" || kind === "adjective" || kind === "unknown"
+  }
+
+  // adjective (default): avoid obvious non-adjective chunks.
+  if (partOfSpeech === "adjective") {
+    return kind === "adjective" || kind === "noun_or_phrase" || kind === "unknown"
+  }
+
+  return true
+}
+
+function normalizeTranslationByPartOfSpeech(
+  value: unknown,
+  includeMultipleTranslations: boolean,
+  partOfSpeech: string
+): string {
+  const normalized = normalizeTranslationText(value)
+  if (!normalized.includes("/")) return normalized
+
+  const chunks = normalized
+    .split("/")
+    .map((item) => item.trim())
+    .filter(Boolean)
+    .filter((item, index, arr) => arr.findIndex((x) => x.toLowerCase() === item.toLowerCase()) === index)
+
+  if (chunks.length === 0) return ""
+
+  const compatibleChunks = chunks.filter((chunk) => {
+    const kind = guessPtBrTranslationKind(chunk)
+    return isTranslationKindCompatibleWithPartOfSpeech(kind, partOfSpeech)
+  })
+
+  const selected = compatibleChunks.length > 0 ? compatibleChunks : chunks
+
+  const ranked = [...selected].sort((a, b) => {
+    const scoreA = scoreTranslationChunkByPartOfSpeech(a, partOfSpeech)
+    const scoreB = scoreTranslationChunkByPartOfSpeech(b, partOfSpeech)
+    if (scoreA === scoreB) {
+      // Keep the model order when confidence ties.
+      return selected.indexOf(a) - selected.indexOf(b)
+    }
+    return scoreB - scoreA
+  })
+
+  // Never force 2 translations: include up to two only when there are two coherent options.
+  if (partOfSpeech === "acronym") return ranked[0]
+  if (!includeMultipleTranslations) return ranked[0]
+  return ranked.slice(0, 2).join(" / ")
+}
+
+function scoreTranslationChunkByPartOfSpeech(chunk: string, partOfSpeech: string): number {
+  const normalized = normalizeInlineWhitespace(chunk).toLowerCase()
+  if (!normalized) return -100
+
+  const startsWithConjunctionPattern = /^(antes que|desde que|para que|a fim de que|de modo que|contanto que|caso|embora)\b/.test(normalized)
+  const preferenceAdverbials = /(em vez de|ao inv[eé]s de|de prefer[eê]ncia|preferencialmente|um tanto|bastante)/.test(
+    normalized
+  )
+
+  let score = 0
+
+  if (partOfSpeech === "adverb") {
+    if (isLikelyPtBrAdverbialChunk(normalized)) score += 3
+    if (preferenceAdverbials) score += 4
+    if (startsWithConjunctionPattern) score -= 4
+  }
+
+  if (partOfSpeech === "conjunction") {
+    if (startsWithConjunctionPattern) score += 4
+    if (isLikelyPtBrAdverbialChunk(normalized)) score -= 2
+  }
+
+  if (partOfSpeech === "verb") {
+    if (/\b\w+(ar|er|ir)\b/.test(normalized) && !/\s/.test(normalized)) score += 3
+  }
+
+  if (partOfSpeech === "preposition") {
+    if (/^(a|ante|ap[oó]s|ate|at[eé]|com|contra|de|desde|em|entre|para|per|perante|por|sem|sob|sobre|tras|tr[aá]s)$/.test(normalized)) {
+      score += 3
+    }
+  }
+
+  return score
 }
 
 function normalizePtBrOrthography(value: unknown): string {
@@ -147,6 +404,116 @@ function normalizePtBrOrthographyMultiline(value: unknown): string {
   }
 
   return withBreaks
+}
+
+function getUsagePrimaryLabel(partOfSpeech: string): string {
+  switch (partOfSpeech) {
+    case "verb":
+      return "Como Verbo"
+    case "noun":
+      return "Como Substantivo"
+    case "adjective":
+      return "Como Adjetivo"
+    case "adverb":
+      return "Como Advérbio"
+    case "preposition":
+      return "Como Preposição"
+    case "conjunction":
+      return "Como Conjunção"
+    case "interjection":
+      return "Como Interjeição"
+    case "phrase":
+      return "Como Expressão"
+    case "acronym":
+      return "Como Sigla"
+    default:
+      return "Uso principal"
+  }
+}
+
+function stripLeadingConjunction(value: string): string {
+  return value.replace(/^(mas|por[eé]m|entretanto|todavia|s[oó] que)\b[\s,:-]*/i, "")
+}
+
+function normalizeUsageSentence(value: string): string {
+  let text = normalizeInlineWhitespace(value)
+  if (!text) return ""
+
+  text = stripLeadingConjunction(text)
+  text = text
+    .replace(/\s+([,.;!?])/g, "$1")
+    .replace(/,\./g, ".")
+    .replace(/\.\,+/g, ".")
+    .replace(/\.{2,}/g, ".")
+    .replace(/\s{2,}/g, " ")
+    .trim()
+
+  return text.replace(/[.!?]$/, "").trim()
+}
+
+function normalizeUsageNoteByPartOfSpeech(value: unknown, partOfSpeech: string): string {
+  const raw = normalizePtBrOrthographyMultiline(value)
+  if (!raw) return ""
+
+  const cleaned = raw
+    .replace(/[“”]/g, '"')
+    .replace(/[‘’]/g, "'")
+    .replace(/\s+/g, " ")
+    .trim()
+
+  const primaryLabel = getUsagePrimaryLabel(partOfSpeech)
+
+  // If model already returned labeled blocks, keep them but normalize line breaks and whitespace.
+  if (/:/.test(cleaned) && /(como|uso|nuance|estrutura|intensificador|atenuador|prefer[eê]ncia)/i.test(cleaned)) {
+    const rawBlocks = cleaned
+      .replace(/\s+([A-Za-zÀ-ÿ][^:\n]{2,40}:)/g, "\n$1")
+      .split("\n")
+      .map((line) => normalizeInlineWhitespace(line))
+      .filter(Boolean)
+      .slice(0, 4)
+
+    const blocks: string[] = rawBlocks.map((line) => {
+      const labelMatch = line.match(/^([^:]{2,40}):\s*(.+)$/)
+      if (!labelMatch) return normalizeUsageSentence(line)
+
+      const label = normalizeInlineWhitespace(labelMatch[1])
+      const content = normalizeUsageSentence(labelMatch[2])
+      const lowerLabel = label.toLowerCase()
+      const isPrimary =
+        lowerLabel === primaryLabel.toLowerCase() ||
+        lowerLabel === "uso principal" ||
+        lowerLabel === "principal"
+
+      // First line should not duplicate the card tag label.
+      return isPrimary ? content : `${label}: ${content}`
+    }).filter(Boolean)
+
+    if (blocks.length > 0) return blocks.join("\n")
+  }
+
+  const normalizedForSplit = cleaned
+    .replace(/\s+(Mas|Por[eé]m|Tamb[eé]m|Em fala|No uso informal|Na fala)\b/gi, ". $1")
+    .replace(/\.+/g, ".")
+
+  const sentences = normalizedForSplit
+    .split(/(?<=[.!?])\s+/)
+    .map((s) => s.trim())
+    .filter(Boolean)
+
+  if (sentences.length === 0) return ""
+
+  const lines: string[] = []
+  lines.push(`${normalizeUsageSentence(sentences[0])}.`)
+
+  if (sentences[1]) {
+    lines.push(`Nuance: ${normalizeUsageSentence(sentences[1])}.`)
+  }
+
+  if (sentences[2]) {
+    lines.push(`Estrutura comum: ${normalizeUsageSentence(sentences[2])}.`)
+  }
+
+  return lines.slice(0, 3).join("\n")
 }
 
 function normalizePartOfSpeech(value: unknown, fallback: string = "noun"): string {
@@ -302,12 +669,13 @@ function normalizeAlternativeForms(
       const partOfSpeech = normalizePartOfSpeech(value?.partOfSpeech)
       const translation = normalizeTranslationText(value?.translation)
       const example = normalizeInlineWhitespace(value?.example)
+      const isSameWord = word.toLowerCase() === mainWord.toLowerCase()
 
       if (!word || !translation || !example) return null
-      if (word.toLowerCase() === mainWord.toLowerCase()) return null
+      if (isSameWord && partOfSpeech === mainPartOfSpeech) return null
       if (word.includes(" ")) return null
       if (partOfSpeech === "phrase" || partOfSpeech === "acronym") return null
-      if (!isLikelyDerivation(mainWord, word)) return null
+      if (!isSameWord && !isLikelyDerivation(mainWord, word)) return null
 
       return {
         word,
@@ -322,7 +690,7 @@ function normalizeAlternativeForms(
       ): item is { word: string; partOfSpeech: string; translation: string; example: string } => Boolean(item)
     )
     .filter((item) => {
-      const key = item.word.toLowerCase()
+      const key = `${item.word.toLowerCase()}::${item.partOfSpeech}`
       if (seen.has(key)) return false
       seen.add(key)
       return true
@@ -341,11 +709,11 @@ function normalizeConjugations(raw: unknown): FlashcardAIResponse["conjugations"
   if (!raw || typeof raw !== "object") return null
   const value = raw as Partial<NonNullable<FlashcardAIResponse["conjugations"]>>
 
-  const simplePresent = asTrimmedString(value.simplePresent)
+  const simplePresent = normalizeSimplePresentConjugation(asTrimmedString(value.simplePresent))
   const simplePast = asTrimmedString(value.simplePast)
-  const presentContinuous = asTrimmedString(value.presentContinuous)
+  const presentContinuous = normalizePresentContinuousConjugation(asTrimmedString(value.presentContinuous))
   const pastContinuous = asTrimmedString(value.pastContinuous)
-  const presentPerfect = asTrimmedString(value.presentPerfect)
+  const presentPerfect = normalizePresentPerfectConjugation(asTrimmedString(value.presentPerfect))
   const pastPerfect = asTrimmedString(value.pastPerfect)
 
   const allFilled =
@@ -368,13 +736,251 @@ function normalizeConjugations(raw: unknown): FlashcardAIResponse["conjugations"
   }
 }
 
+function toThirdPersonSingular(baseVerb: string): string {
+  const base = baseVerb.toLowerCase().trim()
+  if (!base) return ""
+
+  const irregularMap: Record<string, string> = {
+    be: "is",
+    have: "has",
+    do: "does",
+    go: "goes",
+  }
+
+  if (irregularMap[base]) return irregularMap[base]
+  if (/(s|x|z|ch|sh|o)$/.test(base)) return `${base}es`
+  if (/[^aeiou]y$/.test(base)) return `${base.slice(0, -1)}ies`
+  return `${base}s`
+}
+
+function normalizeSimplePresentConjugation(value: string): string {
+  const normalized = normalizeInlineWhitespace(value)
+    .replace(/\([^)]*\)/g, " ")
+    .replace(/\b(I|you|we|they|he|she|it)\b/gi, " ")
+    .replace(/\b(am|is|are|have|has|had)\b/gi, " ")
+    .replace(/[,;|]+/g, " ")
+    .replace(/\s+/g, " ")
+    .trim()
+
+  const tokens = normalized
+    .split(/\s*\/\s*|\s+/)
+    .map((token) => token.replace(/[^A-Za-z'-]/g, "").toLowerCase())
+    .filter(Boolean)
+
+  if (tokens.length === 0) return ""
+
+  const unique = [...new Set(tokens)]
+  const baseCandidate = unique.find((t) => !t.endsWith("s")) ?? unique[0]
+  const thirdCandidate = unique.find(
+    (t) => t !== baseCandidate && (t === toThirdPersonSingular(baseCandidate) || t.endsWith("s"))
+  )
+  const third = thirdCandidate ?? toThirdPersonSingular(baseCandidate)
+
+  return third && third !== baseCandidate ? `${baseCandidate} / ${third}` : baseCandidate
+}
+
+function normalizePresentContinuousConjugation(value: string): string {
+  const normalized = normalizeInlineWhitespace(value)
+    .replace(/\([^)]*\)/g, " ")
+    .replace(/\b(am|is|are|was|were)\b/gi, " ")
+    .replace(/\s+/g, " ")
+    .trim()
+
+  const ingMatch = normalized.match(/\b([A-Za-z'-]+ing)\b/i)
+  if (ingMatch?.[1]) return ingMatch[1].toLowerCase()
+
+  const tokens = normalized
+    .split(/\s+/)
+    .map((token) => token.toLowerCase())
+    .filter(Boolean)
+  return tokens[tokens.length - 1] ?? ""
+}
+
+function normalizePresentPerfectConjugation(value: string): string {
+  const normalized = normalizeInlineWhitespace(value)
+    .replace(/\([^)]*\)/g, " ")
+    .replace(/^\s*(have|has|had)\s+/i, "")
+    .replace(/\s+/g, " ")
+    .trim()
+
+  if (!normalized) return ""
+
+  const chunks = normalized
+    .split("/")
+    .map((chunk) => normalizeInlineWhitespace(chunk))
+    .filter(Boolean)
+
+  return chunks[0] ?? normalized
+}
+
 function inferVerbTypeFromSimplePast(simplePast: string): "regular" | "irregular" {
   const normalized = simplePast.toLowerCase().trim()
   return normalized.endsWith("ed") || normalized.endsWith("d") ? "regular" : "irregular"
 }
 
+function countWords(value: string): number {
+  return value
+    .trim()
+    .split(/\s+/)
+    .filter(Boolean).length
+}
+
+function looksLikeSimpleTranslation(partOfSpeech: string, translation: string): boolean {
+  const normalized = normalizeInlineWhitespace(translation).toLowerCase()
+  if (!normalized) return false
+  if (/[;:()]/.test(normalized)) return false
+
+  const chunks = normalized
+    .split("/")
+    .map((item) => normalizeInlineWhitespace(item))
+    .filter(Boolean)
+
+  if (chunks.length === 0 || chunks.length > 2) return false
+
+  const allChunksSimple = chunks.every((chunk) => {
+    const words = countWords(chunk)
+    return words > 0 && words <= 2 && !/[;:()]/.test(chunk)
+  })
+
+  if (!allChunksSimple) return false
+
+  if (partOfSpeech === "noun" || partOfSpeech === "phrase") {
+    return chunks.every((chunk) => /^(o|a|os|as)\s+/.test(chunk))
+  }
+
+  return true
+}
+
+function isLikelyBrazilianLearnerTrapWord(word: string): boolean {
+  const normalized = normalizeInlineWhitespace(word).toLowerCase()
+  if (!normalized) return false
+
+  const traps = new Set([
+    "rather",
+    "actually",
+    "eventually",
+    "pretend",
+    "sensible",
+    "realize",
+    "library",
+    "parents",
+    "support",
+    "assist",
+    // Homograph verbs: same spelling, different etymology, different conjugation
+    "lie",
+    "wind",
+    "wound",
+    "bear",
+    "ring",
+    "fly",
+    "bat",
+  ])
+
+  return traps.has(normalized)
+}
+
+function shouldSuppressUsageAndExample(params: {
+  word: string
+  partOfSpeech: string
+  translation: string
+  usageNote: string
+  synonymsCount: number
+  antonymsCount: number
+  alternativeFormsCount: number
+  efommMode?: boolean
+  contextMode?: "smart" | "always"
+}): boolean {
+  if (params.contextMode === "always") return false
+
+  const pos = params.partOfSpeech
+  const supportedParts = new Set([
+    "verb",
+    "noun",
+    "adjective",
+    "adverb",
+    "preposition",
+    "conjunction",
+    "interjection",
+  ])
+
+  if (!supportedParts.has(pos)) return false
+  if (!looksLikeSimpleTranslation(pos, params.translation)) return false
+  const isTrapWord = isLikelyBrazilianLearnerTrapWord(params.word)
+  if (isTrapWord) return false
+
+  const note = normalizeInlineWhitespace(params.usageNote)
+  const hasDoNotConfuse = /n[aã]o confundir/i.test(note)
+  const hasHighValueInterpretationSplit =
+    /(falso cognato|diferen[cç]a|sentido figurado|sentido literal|idiom[aá]tic|modal|registro|tom|armadilha|preposi[cç][aã]o)/i.test(
+      note
+    )
+  const hasInterpretationSplit = hasHighValueInterpretationSplit || (hasDoNotConfuse && isTrapWord)
+
+  const hasMaritimeKeywords =
+    Boolean(params.efommMode) && /(mar[ií]t|naval|portu[aá]ri|log[ií]stic|jarg[aã]o|t[eé]cnic|opera[cç][aã]o)/i.test(note)
+  const hasExplicitContrastCue =
+    /(em contraste|ao contr[aá]rio|diferente de|versus|no uso geral|fora do contexto|n[aã]o no sentido)/i.test(note)
+  const hasMaritimeTechnicalContrast = hasMaritimeKeywords && hasExplicitContrastCue
+
+  // Keep context only when there is true multi-interpretation guidance
+  // or explicit maritime/technical contrast in EFOMM mode.
+  if (hasInterpretationSplit || hasMaritimeTechnicalContrast) return false
+
+  // Keep context when alternative forms indicate meaningful contrast.
+  if (params.alternativeFormsCount > 0) return false
+
+  // Straightforward, 1:1 concrete vocabulary -> suppress context/example noise.
+  return true
+}
+
+function normalizeTranslationByLexicalGuards(word: string, translation: string): string {
+  const normalizedWord = normalizeInlineWhitespace(word).toLowerCase()
+  const normalizedTranslation = normalizeTranslationText(translation)
+
+  // Deterministic fix for a frequent nautical hallucination.
+  if (normalizedWord === "portside") {
+    return "bombordo / lado esquerdo"
+  }
+
+  return normalizedTranslation
+}
+
+function logRevisionAudit(
+  event: "generate" | "revise",
+  payload: {
+    word: string
+    partOfSpeech?: string
+    translation: string
+    usageNote: string
+    example: string
+    exampleTranslation?: string
+    internalReview?: InternalReviewBlock
+  }
+) {
+  const note = normalizeInlineWhitespace(payload.usageNote)
+  const translation = normalizeInlineWhitespace(payload.translation)
+  const example = normalizeInlineWhitespace(payload.example)
+  const exampleTranslation = normalizeInlineWhitespace(payload.exampleTranslation ?? "")
+  const checks = payload.internalReview?.checks ?? []
+  const failedChecks = checks.filter((item) => item.status === "fail").map((item) => item.rule)
+
+  const audit = {
+    event,
+    word: normalizeInlineWhitespace(payload.word),
+    partOfSpeech: payload.partOfSpeech ?? "n/a",
+    translationOk: Boolean(translation) && !/[()]/.test(translation),
+    contextOk: note.length === 0 || (!/[\n#*]/.test(note) && note.length <= 260),
+    exampleOk: Boolean(example) && Boolean(exampleTranslation),
+    internalReviewStatus: payload.internalReview?.finalStatus ?? "missing",
+    failedChecks,
+    ts: new Date().toISOString(),
+  }
+
+  console.log(`[AI_REVIEW_AUDIT] ${JSON.stringify(audit)}`)
+}
+
 function normalizeFlashcardResponse(
-  raw: FlashcardAIResponse,
+  raw: FlashcardAIResponseWithReview,
   originalWord: string,
   options: {
     includeConjugations: boolean
@@ -382,18 +988,31 @@ function normalizeFlashcardResponse(
     includeMultipleTranslations: boolean
     synonymsLevel: number
     isCompoundOrAcronym: boolean
+    contextMode?: "smart" | "always"
+    efommMode?: boolean
     targetPartOfSpeech?: string
   }
 ): FlashcardAIResponse {
-  const normalizedWord = normalizeInlineWhitespace(raw?.normalizedWord) || normalizeInlineWhitespace(originalWord)
+  const initialNormalizedWord = normalizeInlineWhitespace(raw?.normalizedWord) || normalizeInlineWhitespace(originalWord)
   const targetPos = options.targetPartOfSpeech
     ? normalizePartOfSpeech(options.targetPartOfSpeech)
     : undefined
-  const partOfSpeech = targetPos ?? normalizePartOfSpeech(raw?.partOfSpeech)
-  const translation = normalizePtBrOrthography(
-    normalizeTranslationByPreference(raw?.translation, options.includeMultipleTranslations)
+  const fallbackResult = inferPartOfSpeechWithAcronymFallback({
+    originalWord,
+    normalizedWord: initialNormalizedWord,
+    rawPartOfSpeech: raw?.partOfSpeech ?? "noun",
+    translation: normalizeTranslationText(raw?.translation),
+    usageNote: asTrimmedString(raw?.usageNote),
+  })
+  const partOfSpeech = targetPos ?? fallbackResult.partOfSpeech
+  const normalizedWord = partOfSpeech === "acronym" ? fallbackResult.normalizedWord : initialNormalizedWord
+  const translationByPartOfSpeech = normalizeTranslationByPartOfSpeech(
+    raw?.translation,
+    options.includeMultipleTranslations,
+    partOfSpeech
   )
-  const usageNote = normalizePtBrOrthographyMultiline(raw?.usageNote)
+  const translation = normalizePtBrOrthography(normalizeTranslationByLexicalGuards(normalizedWord, translationByPartOfSpeech))
+  const usageNote = normalizeUsageNoteByPartOfSpeech(raw?.usageNote, partOfSpeech)
   const example = normalizeInlineWhitespace(raw?.example)
   const exampleTranslation = normalizePtBrOrthography(raw?.exampleTranslation)
 
@@ -428,11 +1047,23 @@ function normalizeFlashcardResponse(
         `Passado é ${conjugations?.simplePast ?? "n/a"}. Termina em -ed/-d? ${verbType === "regular" ? "Yes" : "No"}. Tipo: ${verbType}`
       : "n/a"
 
+  const suppressUsageAndExample = shouldSuppressUsageAndExample({
+    word: normalizedWord,
+    partOfSpeech,
+    translation,
+    usageNote,
+    synonymsCount: synonyms.length,
+    antonymsCount: antonyms.length,
+    alternativeFormsCount: alternativeForms.length,
+    efommMode: options.efommMode,
+    contextMode: options.contextMode,
+  })
+
   return {
     normalizedWord,
     partOfSpeech,
     translation,
-    usageNote,
+    usageNote: suppressUsageAndExample ? "" : usageNote,
     synonyms,
     antonyms,
     example,
@@ -445,29 +1076,56 @@ function normalizeFlashcardResponse(
 }
 
 function normalizeRevisionResponse(
-  raw: FlashcardRevisionResponse,
+  raw: FlashcardRevisionResponseWithReview,
   options: {
     word: string
     partOfSpeech: string
     includeAlternativeForms: boolean
     synonymsLevel: number
     isCompoundOrAcronym: boolean
+    contextMode?: "smart" | "always"
+    efommMode?: boolean
   }
 ): FlashcardRevisionResponse {
+  const normalizedTranslation = normalizeTranslationByLexicalGuards(options.word, normalizeTranslationText(raw?.translation))
+  const translation = normalizePtBrOrthography(
+    normalizePartOfSpeech(options.partOfSpeech) === "acronym"
+      ? pickPrimaryTranslation(normalizedTranslation)
+      : normalizedTranslation
+  )
+  const usageNote = normalizeUsageNoteByPartOfSpeech(raw?.usageNote, normalizePartOfSpeech(options.partOfSpeech))
+  const synonyms = normalizeLexicalRelations(raw?.synonyms, options.synonymsLevel)
+  const antonyms = normalizeLexicalRelations(raw?.antonyms, options.synonymsLevel)
+  const example = normalizeInlineWhitespace(raw?.example)
+  const exampleTranslation = normalizePtBrOrthography(raw?.exampleTranslation)
+  const alternativeForms = normalizeAlternativeForms(
+    raw?.alternativeForms,
+    normalizeInlineWhitespace(options.word),
+    normalizePartOfSpeech(options.partOfSpeech),
+    options.includeAlternativeForms,
+    options.isCompoundOrAcronym
+  )
+
+  const suppressUsageAndExample = shouldSuppressUsageAndExample({
+    word: options.word,
+    partOfSpeech: normalizePartOfSpeech(options.partOfSpeech),
+    translation,
+    usageNote,
+    synonymsCount: synonyms.length,
+    antonymsCount: antonyms.length,
+    alternativeFormsCount: alternativeForms.length,
+    efommMode: options.efommMode,
+    contextMode: options.contextMode,
+  })
+
   return {
-    translation: normalizePtBrOrthography(normalizeTranslationText(raw?.translation)),
-    usageNote: normalizePtBrOrthographyMultiline(raw?.usageNote),
-    synonyms: normalizeLexicalRelations(raw?.synonyms, options.synonymsLevel),
-    antonyms: normalizeLexicalRelations(raw?.antonyms, options.synonymsLevel),
-    example: normalizeInlineWhitespace(raw?.example),
-    exampleTranslation: normalizePtBrOrthography(raw?.exampleTranslation),
-    alternativeForms: normalizeAlternativeForms(
-      raw?.alternativeForms,
-      normalizeInlineWhitespace(options.word),
-      normalizePartOfSpeech(options.partOfSpeech),
-      options.includeAlternativeForms,
-      options.isCompoundOrAcronym
-    ),
+    translation,
+    usageNote: suppressUsageAndExample ? "" : usageNote,
+    synonyms,
+    antonyms,
+    example,
+    exampleTranslation,
+    alternativeForms,
   }
 }
 
@@ -580,6 +1238,7 @@ export interface GenerateFlashcardOptions {
   includeConjugations?: boolean
   includeAlternativeForms?: boolean
   includeUsageNote?: boolean
+  contextMode?: "smart" | "always"
   includeMultipleTranslations?: boolean
   efommMode?: boolean
   targetPartOfSpeech?: string
@@ -600,6 +1259,33 @@ export interface FlashcardRevisionResponse {
   }[]
 }
 
+interface InternalReviewItem {
+  rule:
+    | "zero_fluff_audit"
+    | "consistency"
+    | "translation_sync"
+    | "synonym_accuracy"
+    | "alternative_forms_validity"
+    | "usage_note_format"
+    | "ptbr_orthography"
+    | "anti_hallucination"
+  status: "pass" | "fail"
+  fixApplied: string
+}
+
+interface InternalReviewBlock {
+  finalStatus: "pass" | "fail"
+  checks: InternalReviewItem[]
+}
+
+type FlashcardAIResponseWithReview = FlashcardAIResponse & {
+  _internalReview?: InternalReviewBlock
+}
+
+type FlashcardRevisionResponseWithReview = FlashcardRevisionResponse & {
+  _internalReview?: InternalReviewBlock
+}
+
 export async function generateFlashcardData(
   word: string,
   model: string = DEFAULT_AI_MODEL,
@@ -609,6 +1295,7 @@ export async function generateFlashcardData(
   const includeConjugations = options?.includeConjugations ?? true
   const includeAlternativeForms = options?.includeAlternativeForms ?? true
   const includeUsageNote = options?.includeUsageNote ?? true
+  const contextMode = options?.contextMode ?? "smart"
   const includeMultipleTranslations = options?.includeMultipleTranslations ?? false
   const efommMode = options?.efommMode ?? false
   const targetPartOfSpeech = options?.targetPartOfSpeech
@@ -616,161 +1303,240 @@ export async function generateFlashcardData(
   console.log(`[OpenRouter] Calling ${model} for word: ${word}`)
 
   // Lógica TS para blindar siglas e expressões compostas
-  const isCompoundOrAcronym = word.trim().includes(" ") || (word === word.toUpperCase() && word.length > 1);
+  const isCompoundOrAcronym = word.trim().includes(" ") || isAcronymCandidate(word)
 
   const synonymsInstruction =
     synonymsLevel === 0
-      ? `4. NÃO gere sinônimos ou antônimos. Retorne "synonyms": [] e "antonyms": [].`
-      : `4. SINÔNIMOS E ANTÔNIMOS (Em Inglês Americano): Forneça até ${synonymsLevel} sinônimos e até ${synonymsLevel} antônimos que correspondam EXATAMENTE ao sentido do card (mesma classe gramatical + mesmo significado). Se não existirem, retorne [].
-   - Cada sinônimo/antônimo DEVE incluir um tipo: "literal" | "figurative" | "slang" | "abstract".
-     * literal: ação física / objeto concreto / denotação direta
-     * figurative: uso metafórico/abstrato (não físico)
-     * slang: expressão muito informal / coloquial / idiomática
-     * abstract: conceito geral/intelectual sem foco em fisicalidade
-   - Fidelidade ao contexto: não inclua palavras que servem apenas para outros sentidos da palavra.
-   - Exclusão: evite palavras genéricas ou preguiçosas ("get", "do", "go") a menos que sejam a melhor correspondência.
-   - Antônimos: prefira opostos diretos do significado pretendido.`
+      ? `STEP 4 — SYNONYMS AND ANTONYMS: Do NOT generate synonyms or antonyms. Return "synonyms": [] and "antonyms": [].`
+      : `STEP 4 — SYNONYMS AND ANTONYMS (American English)
+Provide up to ${synonymsLevel} synonym(s) and up to ${synonymsLevel} antonym(s) that match EXACTLY the same part of speech AND meaning context as the main entry. If none exist, return [].
+- Each item MUST include a type: "literal" | "figurative" | "slang" | "abstract"
+  * literal: physical action, concrete object, or direct denotation
+  * figurative: metaphorical or abstract usage (non-physical)
+  * slang: very informal, colloquial, or idiomatic expression
+  * abstract: broad intellectual concept without emphasis on physicality
+- STRICT CONTEXT FIDELITY: Do NOT include words that only apply to other senses of the entry.
+- EXCLUSION: Avoid vague or overloaded words ("get", "do", "go") unless they are genuinely the best match.
+- Antonyms: prefer direct opposites of the intended meaning.`
 
   const conjugationsInstruction = includeConjugations
-    ? `6. CONJUGAÇÕES (Em Inglês Americano): Se "partOfSpeech" for "verb", forneça os 6 tempos verbais. Se NÃO for um verbo, defina "conjugations" como null.`
-    : `6. CONJUGAÇÕES: Defina "conjugations" null.`
+    ? `STEP 7 — VERB CONJUGATIONS (American English)
+If "partOfSpeech" is "verb", provide all 6 tenses. If NOT a verb, set "conjugations" to null.
+- HOMOGRAPH LOCK: If the word has two completely different etymological origins with different conjugations (e.g., "lie" = to tell a falsehood [regular: lied/lied] vs "lie" = to recline [irregular: lay/lain]), conjugate ONLY the meaning expressed by the "translation" field. Do NOT mix conjugations from the other homograph.
+- FORMAT LOCK (CRITICAL):
+  * simplePresent must be only base + 3rd person, in compact form: "lie / lies" (never include pronouns).
+  * presentContinuous must be only the -ing form: "lying" (never include am/is/are).
+  * presentPerfect must be only the past participle: "lied" (never include have/has).
+- verbType MUST match the conjugation you actually provided, not the other homograph's pattern.`
+    : `STEP 7 — VERB CONJUGATIONS: Set "conjugations" to null.`
 
   const usageNoteInstruction = includeUsageNote
-    ? `3b. NOTA DE USO / CONTEXTO (opcional): Seja ULTRA CONCISO e DIRETO (estilo flashcard, máximo de 2 a 4 linhas curtas). 
-   - PROIBIDO usar introduções narrativas ou metalinguagem (NÃO escreva "A palavra X descreve...", "Diz-se quando...", "É comum em...").
-   - Use FORMATAÇÃO EM BLOCOS, com QUEBRA DE LINHA, no padrão "Rótulo: conteúdo".
-   - Exemplo de formato aceito:
-     Uso principal: ...
-     Nuance: ...
-     Estrutura comum: ...
-   - Cada linha deve trazer apenas uma ideia objetiva.
-   - Exemplos de estilo aceito:
-     * might: "Indica possibilidade remota ou incerteza. Também atua como alternativa formal, polida e cautelosa a 'can' em perguntas, sugestões e pedidos."
-     * dwarfing: "Efeito de fazer algo parecer minúsculo ou insignificante devido a um contraste de proporção."
-     * challenging water quality or (CWQ): "Condição ambiental (alta turbidez, excesso de lama ou algas) que impede o funcionamento adequado do Sistema de Tratamento de Água de Lastro (BWMS), forçando a redução da velocidade da operação comercial do navio."
-   - SE A PALAVRA FOR UMA SIGLA, OBRIGATORIAMENTE escreva o que as letras significam em inglês.
-   - Explique a essência em PORTUGUÊS BRASILEIRO.
-  - Use ortografia do Português Brasileiro atual (Acordo Ortográfico vigente; ex.: "ideia", "assembleia", sem trema).
-   - PROIBIDO dar "bronca" ou mencionar correções ortográficas que você ajustou.
-   - Se a palavra não tiver nuance especial, retorne "".`
-    : `3b. NOTA DE USO: NÃO gere notas de uso. Sempre retorne "usageNote": "".`
+    ? `STEP 3 — USAGE NOTE (Brazilian Portuguese, 2009 Orthographic Agreement)
+Be ULTRA CONCISE and DIRECT (flashcard style, 2–3 short sentences maximum).
+- PROHIBITED: Markdown syntax (**, *, #), bullet points, or embedded line breaks (\\n). The text must be continuous and plain.
+- ZERO-FLUFF RULE (CRITICAL): DO NOT state the obvious. If the word is a basic object, animal, color, common action, or everyday 1:1 translation (e.g., "apple", "car", "blue", "run", "bought", "house", "dog"), YOU MUST RETURN "usageNote": "".
+- ONLY write a usage note IF AND ONLY IF there is a high risk of confusion for Brazilian learners: false cognates (e.g., "actually"), tricky modals ("rather"), preposition mismatches ("depend on"), strict maritime technical jargon, or HOMOGRAPH TRAPS (see below).
+- HOMOGRAPH TRAP RULE: If the word is a verb that shares its spelling with another verb of completely different etymology and conjugation pattern (e.g., "lie" = mentir [regular: lied/lied] vs "lie" = deitar [irregular: lay/lain]), you MUST include a usage note warning: state the meaning being translated, its conjugation pattern (regular/irregular), and briefly contrast with the other homograph's meaning and conjugation. Example: "Este 'lie' significa mentir e é regular (lied/lied). Não confundir com 'lie' = deitar, que é irregular (lay/lain)."
+- If generating a note, write naturally. You MAY use short inline labels like "Nuance:" to introduce a secondary use, but DO NOT repeat the word "Nuance:" multiple times in the same text.
+- If the word is an ACRONYM, MANDATORY: spell out what each letter stands for (in English), then explain the meaning in Portuguese.`
+    : `STEP 3 — USAGE NOTE: Do NOT generate a usage note. Always return "usageNote": "".`
+
+  const contextPolicyInstruction =
+    contextMode === "always"
+      ? `CONTEXT POLICY: Keep "usageNote" for all entries.`
+      : `CONTEXT POLICY: Default to minimal cards for basic words. For straightforward 1:1 concrete vocabulary, return "usageNote": "". However, ALWAYS generate the example fields.`
 
   const translationInstruction = includeMultipleTranslations
-    ? `3. TRADUÇÃO (SECA E DIRETA): Forneça até 2 traduções mais comuns em português, separadas por barra (/).`
-    : `3. TRADUÇÃO (SECA E DIRETA): Forneça EXATAMENTE 1 tradução principal em português (SEM barra).`
+    ? `STEP 2 — TRANSLATION (Brazilian Portuguese, 2009 Orthographic Agreement)
+Provide up to 2 EXACT and most common translations in Portuguese, separated by a slash (/).
+- GOLDEN RULE: The chosen translation(s) MUST make complete, natural sense when mentally substituted into the example sentence you generate in STEP 5.
+- ACRONYM OVERRIDE: if partOfSpeech is "acronym", always provide EXACTLY 1 translation (NO slash separators).
+- DO NOT over-simplify adverbs or nuanced expressions (e.g., do NOT translate "rather" as just "mais"; use full nuance forms like "em vez de / bastante" or "um tanto").
+- CONTEXT-FIRST RULE: prioritize the FUNCTION in the sentence, not a dictionary fragment. For modal patterns ("would rather", "had better", "used to"), translate the full function naturally in Portuguese.
+- Specific guardrail for "rather":
+  * "I'd rather stay home than go out tonight." → translation sense should map to "preferir" / "em vez de", never to "antes que".
+  * Acceptable PT-BR example translation: "Eu prefiro ficar em casa em vez de sair hoje à noite."
+- For nouns and phrases, ALWAYS include the definite article (e.g., "a proa", "o porto").
+- DO NOT force 2 translations if no second perfect match exists.
+- DO NOT include parentheses, explanatory notes, or slashes used as shortcuts inside this field.`
+    : `STEP 2 — TRANSLATION (Brazilian Portuguese, 2009 Orthographic Agreement)
+Provide EXACTLY 1 main translation in Portuguese (NO slash separators).
+- GOLDEN RULE: The chosen translation MUST make complete, natural sense when mentally substituted into the example sentence you generate in STEP 5.
+- DO NOT over-simplify adverbs or nuanced expressions (e.g., do NOT translate "rather" as just "mais").
+- CONTEXT-FIRST RULE: prioritize the FUNCTION in the sentence, not a dictionary fragment. For modal patterns ("would rather", "had better", "used to"), translate the full function naturally in Portuguese.
+- Specific guardrail for "rather": when the sentence expresses preference ("would rather"), the translation must map to "preferir" / "em vez de", not "antes que".
+- For nouns and phrases, ALWAYS include the definite article (e.g., "a proa", "o porto").
+- DO NOT include parentheses, explanatory notes, or slashes inside this field.`
 
   const alternativeFormsInstruction = includeAlternativeForms && !isCompoundOrAcronym
-    ? `7. FORMAS ALTERNATIVAS (Derivações e Conversões): SEMPRE QUE POSSÍVEL, force a inclusão de até 2 formas derivadas comuns no Inglês Americano. 
-   - TRAVA DE EXPRESSÕES: Se a sua palavra final contiver ESPAÇOS, ABORTE esta regra e retorne "alternativeForms": [] obrigatoriamente.
-   - PROIBIDO usar "partOfSpeech" = "phrase" ou "acronym" em "alternativeForms".
-   - Cada "word" em "alternativeForms" deve ser UMA PALAVRA (sem espaços e sem sigla).
-   - A classe gramatical ("partOfSpeech") DEVE ser diferente da principal.
-  - CADA ITEM DEVE ser uma derivação real e dicionarizada da mesma raiz da palavra principal.
-  - PROIBIDO incluir palavras apenas parecidas na escrita/pronúncia (ex.: "quite" x "quiet") ou palavras inventadas.
-   - A "word" deve ser em INGLÊS.
-   - Forneça uma tradução SECA e DIRETA EM PORTUGUÊS BRASILEIRO (OBRIGATÓRIO incluir o artigo se for substantivo).
-   - Evite meta-definições ("o ato de...").
-   - Forneça uma frase de exemplo EM INGLÊS usando essa forma alternativa.
-   - Se a palavra for simples (uma única palavra, não sigla) e existir derivação comum, retorne PELO MENOS 1 item em "alternativeForms".`
-    : `7. FORMAS ALTERNATIVAS: NÃO gere formas alternativas. Sempre retorne "alternativeForms": [].`
+    ? `STEP 8 — ALTERNATIVE FORMS (Derivations and Cross-POS Conversions)
+Follow STRICT morphological rules:
+- PHRASE LOCK: If the final word contains SPACES, return "alternativeForms": [] unconditionally.
+- PROHIBITED partOfSpeech values here: "phrase" or "acronym".
+- SAME WORD, DIFFERENT CLASS: If the exact word can function as another part of speech WITHOUT changing spelling, list it (e.g., "pretty" adjective → "pretty" adverb).
+- REAL DERIVATIONS ONLY: List only derived words that share the SAME ROOT and EXIST in official English dictionaries.
+- ABSOLUTELY PROHIBITED: Do NOT invent forms (CRITICAL ERROR example: "rather" → "rathern"). If no real derivation exists, return [].
+- ABSOLUTELY PROHIBITED: Do NOT group words by mere spelling similarity (CRITICAL ERROR example: "quite" adverb → "quiet" adjective; they are independent words).
+- Provide a DRY TRANSLATION (with article for nouns) and an example sentence in English.`
+    : `STEP 8 — ALTERNATIVE FORMS: Do NOT generate alternative forms. Always return "alternativeForms": [].`
 
- const efommInstruction = efommMode
-    ? `MODO EFOMM (MARÍTIMO/NAVAL): APENAS aplique este modo se a palavra possuir um jargão ou significado TÉCNICO ESPECÍFICO no contexto marítimo, naval, portuário ou logístico que seja diferente do uso cotidiano.
-   - REGRA ANTI-ALUCINAÇÃO: Se a palavra for de uso geral (ex: "dwarfing", "water", "run", "big") e significar exatamente a mesma coisa no mar e em terra, IGNORE este modo. 
-  - PROIBIDO forçar cenários navais em palavras comuns. NÃO crie notas de uso dizendo "Em contexto naval, refere-se a embarcações..." se a palavra não for exclusiva para isso. Apenas trate-a como Inglês Geral.
-  - Para siglas/termos técnicos de água de lastro (ex: CWQ, BWMS), priorize terminologia operacional consagrada e contexto real (turbidez alta, lama/algas, perda de eficiência do tratamento, redução de vazão/velocidade operacional).`
+  const efommInstruction = efommMode
+    ? `
+EFOMM MODE (MARITIME/NAVAL): Apply ONLY if the word has a SPECIFIC TECHNICAL meaning in maritime, naval, port, or logistics contexts that differs from everyday usage.
+- ANTI-HALLUCINATION: If the word is general-purpose (e.g., "dwarfing", "water", "run") and means the same on land and at sea, IGNORE this mode entirely.
+- PROHIBITED: Do NOT force naval scenarios onto common words.
+- For acronyms/technical terms (e.g., CWQ, BWMS, EFOMM), prioritize established operational terminology from daily machinery and navigation practice.
+`
     : ``
 
   const messages: OpenRouterMessage[] = [
     {
       role: "system",
-      content: `Você é um professor sênior de Inglês Americano especializado em ensinar brasileiros.
-Sua base de conhecimento é estritamente INGLÊS AMERICANO.
+      content: `You are a senior American English professor specialized in teaching Brazilian Portuguese speakers. You create high-quality, precise study flashcards.
 
+LANGUAGE RULES:
+- Your internal reasoning is in English.
+- The fields "translation", "usageNote", "exampleTranslation", and all user-facing Portuguese content MUST be written in Brazilian Portuguese following the 2009 New Orthographic Agreement.
 ${efommInstruction}
+══════════════════════════════════════════
+STEP 0 — INPUT NORMALIZATION
+══════════════════════════════════════════
+- Acronym expansion: If the input follows the pattern "full term (ACRONYM)", normalize to the ACRONYM in uppercase and set partOfSpeech to "acronym".
+- CASE-INSENSITIVE ACRONYM CHECK: For one-token entries typed in lowercase/mixed case (e.g., "oow"), first test normal lexical classes; if none fits naturally and the form is an established acronym, convert to uppercase and set partOfSpeech to "acronym".
+- "-ing" morphology: If the word ends in "-ing", determine whether it functions as a verbal noun (→ noun) or gerund/present participle (→ verb) based on standard usage.
+- Silently correct hyphenation errors and bare infinitives before processing.
 
-Siga estes passos para gerar dados de estudo:
-0a. SIGLAS COM EXPANSÃO: Se a entrada vier no formato "termo completo (sigla)" (ex: "challenging water quality (cwq)"), normalize para a SIGLA em maiúsculas ("CWQ") e classifique como "acronym".
-0. MORFOLOGIA (-ing): Se a palavra terminar em "-ing", decida se é um SUBSTANTIVO VERBAL (noun - ex: "mooring") ou GERÚNDIO/PARTICÍPIO (verb). Prefira "noun" quando nomeia um objeto/sistema.
-1. NORMALIZAÇÃO:
-   - ERRO DE HÍFEN EM VERBOS/EXPRESSÕES: Corrija silenciosamente ("look-forward-to" -> "look forward to"). PROIBIDO juntar as palavras.
-   - ERRO DE INFINITIVO: Remova o "to" ("to-steer" -> "steer").
-   - HÍFEN CORRETO: Mantenha em substantivos/adjetivos que exigem (ex: "make-up").
-2. CLASSE GRAMATICAL ("partOfSpeech"): Classifique OBRIGATORIAMENTE usando APENAS as classes do JSON. 
-   - Retorne "acronym" para siglas. 
-   - Retorne "phrase" APENAS para expressões com mais de uma palavra SEPARADAS POR ESPAÇO.
+══════════════════════════════════════════
+STEP 1 — PART OF SPEECH (partOfSpeech)
+══════════════════════════════════════════
+Classify using EXACTLY one of: verb | noun | adjective | adverb | preposition | conjunction | interjection | phrase | acronym
+- Return "phrase" ONLY for multi-word expressions that contain a space.
+- Use "acronym" only when the entry is an established abbreviation/sigla; do not force acronym for regular dictionary words.
+- The chosen partOfSpeech GOVERNS every other field — never contradict it.
+
+══════════════════════════════════════════
 ${translationInstruction}
-   - REGRA DE OURO: PROIBIDO incluir parênteses, explicações, contextos ou frases dentro do campo de tradução (NÃO faça: "ofuscamento (em relação a algo maior)").
-   - PROIBIDO usar meta-definições ou frases ("o ato de...", "ficar menor que..."). A tradução deve ser a palavra equivalente, não o significado dela.
-   - IMPORTANTE (artigos): Se for "noun" ou "phrase", SEMPRE inclua o artigo (ex: "a proa", "o porto").
-  - Se for "acronym" técnico (incluindo EFOMM), priorize tradução de uso profissional/operacional e EVITE literal forçada.
-  - Se houver alternativa operacional relevante, retorne no formato "tradução principal / alternativa operacional".
-   - TRADUÇÃO TÉCNICA: Evite traduções literais em jargões.
+
+══════════════════════════════════════════
 ${usageNoteInstruction}
+${contextPolicyInstruction}
+
+══════════════════════════════════════════
 ${synonymsInstruction}
-5. EXEMPLO: Uma frase de exemplo natural em INGLÊS AMERICANO.
+
+══════════════════════════════════════════
+STEP 5 — EXAMPLE SENTENCE (American English)
+══════════════════════════════════════════
+Write ONE natural American English sentence that clearly illustrates the EXACT meaning expressed by the translation in STEP 2.
+- The example MUST be semantically synchronized: if the translation represents usage X, the example must demonstrate usage X — not usage Y.
+- FUNCTIONAL ALIGNMENT TEST: after drafting the example, verify that replacing the English target with the Portuguese translation intent still yields a natural Portuguese meaning.
+- For modal-preference constructions (e.g., "would rather"), ensure the Portuguese intent is "preferir"/"em vez de" instead of literal fragments like "antes que".
+- MANDATORY: EVERY word, no matter how simple (e.g., "car", "apple", "blue"), MUST have an "example" and "exampleTranslation". NEVER leave them empty.
+- Prefer sentences that highlight why the word is interesting or challenging for learners.
+
+══════════════════════════════════════════
+STEP 6 — EXAMPLE TRANSLATION (Brazilian Portuguese, 2009 Orthographic Agreement)
+══════════════════════════════════════════
+Provide a natural, fluent Brazilian Portuguese translation of the example sentence.
+- Do not translate word-for-word; use natural phrasing.
+
+══════════════════════════════════════════
 ${conjugationsInstruction}
+- verbType: if simplePast ends in "-ed" or "-d", it is "regular"; otherwise "irregular".
+- _verbReasoning format: "Past tense is [X]. Ends in -ed/-d? [Yes/No]. Type: [regular/irregular]."
+
+══════════════════════════════════════════
 ${alternativeFormsInstruction}
 
-REGRAS DE ANTI-ALUCINAÇÃO (OBRIGATÓRIAS):
-- NÃO invente significado técnico específico se ele não for consagrado.
-- Se houver dúvida semântica, prefira saída conservadora: "usageNote": "", "synonyms": [], "antonyms": [].
-- NÃO use Markdown, cercas de código, comentários, texto fora do JSON ou chaves extras.
-- NÃO contradiga a classe gramatical escolhida.
-- "normalizedWord" deve ser apenas a forma final normalizada da palavra (sem explicações).
-- Em "alternativeForms", cada item deve ser palavra única (sem espaços) e não pode ser sigla.
+══════════════════════════════════════════
+STEP 9 — MANDATORY SELF-REVIEW (complete before writing final JSON)
+══════════════════════════════════════════
+Before outputting, you MUST fill a concise "_internalReview" object first, then correct issues in official fields:
+1. CONSISTENCY: Is "partOfSpeech" fully consistent with translation, usageNote, example, synonyms, and antonyms?
+2. TRANSLATION SYNC: Does the translation make natural sense when substituted into the example sentence, including idiom/modal patterns?
+3. SYNONYM ACCURACY: Do all synonyms/antonyms share EXACTLY the same POS and meaning context?
+4. ALTERNATIVE FORMS VALIDITY: Does every word in "alternativeForms" exist in official dictionaries?
+5. USAGE NOTE FORMATTING: Does "usageNote" contain NO markdown, NO line breaks, NO bullet points?
+6. PORTUGUESE ORTHOGRAPHY: Does all Portuguese text comply with the 2009 Agreement?
+7. ANTI-HALLUCINATION: Are you fully confident about every claim regarding this word's meaning?
+8. ZERO-FLUFF AUDIT: Is this a basic, everyday 1:1 vocabulary word (like 'car', 'blue', 'buy')? If YES, you MUST clear the "usageNote" field to "". Only keep notes for real learner traps.
 
-Retorne um JSON exato (MANTENHA AS CHAVES EM INGLÊS):
+Rules for "_internalReview":
+- Keep it SHORT and STRUCTURED only.
+- Include exactly one check item for each rule above with "pass"/"fail" and a brief "fixApplied" note.
+- If any check is "fail", fix the corresponding official field before final output.
+- Set "finalStatus" to "pass" only if all checks pass after fixes.
+Output ONLY the corrected JSON after completing this structured review.
+
+══════════════════════════════════════════
+OUTPUT FORMAT
+══════════════════════════════════════════
+Return ONLY a valid JSON object. Do NOT wrap it in code blocks. Do NOT add comments.
 {
-  "normalizedWord": "a palavra",
-  "partOfSpeech": "verb" | "noun" | "adjective" | "adverb" | "preposition" | "conjunction" | "interjection" | "phrase" | "acronym",
-  "translation": "tradução seca (com artigo para substantivos)",
-  "usageNote": "nota super direta ou string vazia",
-  "synonyms": [{"word": "synonym1", "type": "literal" | "figurative" | "slang" | "abstract"}],
-  "antonyms": [{"word": "antonym1", "type": "literal" | "figurative" | "slang" | "abstract"}],
-  "example": "Frase de exemplo em inglês.",
-  "exampleTranslation": "Tradução natural da frase em Português Brasileiro.",
-  "alternativeForms": [{"word": "elevation", "partOfSpeech": "noun", "translation": "a elevação", "example": "The elevation is 2,000 meters."}],
-  "_verbReasoning": "Template: 'Passado é [palavra]. Termina em -ed/-d? [Yes/No]. Tipo: [regular/irregular]'",
-  "verbType": "regular" | "irregular" | null,
-  "conjugations": { ... }
-}
-
-REGRAS CRÍTICAS DE VERBOS:
-  - Se NÃO for verbo: "_verbReasoning": "n/a", "verbType": null e "conjugations": null.
-  - Se FOR verbo: "_verbReasoning" decide. Se passado termina em -ed/-d (Yes), "verbType": "regular". Senão, "verbType": "irregular".
-
-REGRA CRÍTICA DE COERÊNCIA POR CLASSE GRAMATICAL:
-- A classe final em "partOfSpeech" governa TODO o card: "translation", "usageNote", "synonyms", "antonyms" e "example".
-- Se a palavra tiver outros usos em classes diferentes, NÃO misture no contexto principal. Mostre esses outros usos somente em "alternativeForms" (quando houver derivação real).`,
+  "_internalReview": {
+    "finalStatus": "pass|fail",
+    "checks": [
+      {"rule": "zero_fluff_audit", "status": "pass|fail", "fixApplied": "cleared usageNote because word is a basic 1:1 translation"},
+      {"rule": "consistency", "status": "pass|fail", "fixApplied": "short note"},
+      {"rule": "translation_sync", "status": "pass|fail", "fixApplied": "short note"},
+      {"rule": "synonym_accuracy", "status": "pass|fail", "fixApplied": "short note"},
+      {"rule": "alternative_forms_validity", "status": "pass|fail", "fixApplied": "short note"},
+      {"rule": "usage_note_format", "status": "pass|fail", "fixApplied": "short note"},
+      {"rule": "ptbr_orthography", "status": "pass|fail", "fixApplied": "short note"},
+      {"rule": "anti_hallucination", "status": "pass|fail", "fixApplied": "short note"}
+    ]
+  },
+  "normalizedWord": "the word",
+  "partOfSpeech": "verb|noun|adjective|adverb|preposition|conjunction|interjection|phrase|acronym",
+  "translation": "Brazilian Portuguese translation",
+  "usageNote": "plain Brazilian Portuguese text or empty string",
+  "synonyms": [{"word": "synonym", "type": "literal|figurative|slang|abstract"}],
+  "antonyms": [{"word": "antonym", "type": "literal|figurative|slang|abstract"}],
+  "example": "American English sentence.",
+  "exampleTranslation": "Brazilian Portuguese translation of the example.",
+  "alternativeForms": [{"word": "form", "partOfSpeech": "noun", "translation": "a/o ...", "example": "English sentence."}],
+  "_verbReasoning": "Past tense is X. Ends in -ed/-d? Yes/No. Type: regular/irregular.",
+  "verbType": "regular|irregular|null",
+  "conjugations": {"simplePresent": "...", "simplePast": "...", "presentContinuous": "...", "pastContinuous": "...", "presentPerfect": "...", "pastPerfect": "..."} | null
+}`
     },
     {
       role: "user",
       content: targetPartOfSpeech
-        ? `Gere dados de flashcard para: "${word}". Trate-a EXCLUSIVAMENTE com o uso de "${targetPartOfSpeech}" e retorne "partOfSpeech" como "${targetPartOfSpeech}".`
-        : `Gere dados de flashcard para: "${word}"`,
+        ? `Generate flashcard data for: "${word}". Treat it EXCLUSIVELY as a "${targetPartOfSpeech}" and return "partOfSpeech" as "${targetPartOfSpeech}".`
+        : `Generate flashcard data for: "${word}"`,
     },
   ]
 
-  const raw = await callOpenRouter<FlashcardAIResponse>(
+  const raw = await callOpenRouter<FlashcardAIResponseWithReview>(
     messages,
     model,
-    {
-      type: "json_object",
-    },
-    {
-      temperature: 0.2,
-    }
+    { type: "json_object" },
+    { temperature: 0.2 }
   )
 
-  return normalizeFlashcardResponse(raw, word, {
+  const normalized = normalizeFlashcardResponse(raw, word, {
     includeConjugations,
     includeAlternativeForms,
     includeMultipleTranslations,
     synonymsLevel,
     isCompoundOrAcronym,
+    contextMode,
+    efommMode,
     targetPartOfSpeech,
   })
+
+  logRevisionAudit("generate", {
+    word: normalized.normalizedWord,
+    partOfSpeech: normalized.partOfSpeech,
+    translation: normalized.translation,
+    usageNote: normalized.usageNote ?? "",
+    example: normalized.example,
+    exampleTranslation: normalized.exampleTranslation,
+    internalReview: raw._internalReview,
+  })
+
+  return normalized
 }
 
 export async function reviseFlashcardByTranslation(
@@ -782,85 +1548,117 @@ export async function reviseFlashcardByTranslation(
     synonymsLevel?: number
     includeAlternativeForms?: boolean
     includeUsageNote?: boolean
+    contextMode?: "smart" | "always"
   },
   model: string = DEFAULT_AI_MODEL
 ): Promise<FlashcardRevisionResponse> {
   const synonymsLevel = Math.max(0, Math.min(3, input.synonymsLevel ?? 2))
   const includeAlternativeForms = input.includeAlternativeForms ?? true
   const includeUsageNote = input.includeUsageNote ?? true
+  const contextMode = input.contextMode ?? "smart"
   const efommMode = input.efommMode ?? false
 
-  const isCompoundOrAcronym = input.word.trim().includes(" ") || (input.word === input.word.toUpperCase() && input.word.length > 1);
+  const isCompoundOrAcronym = input.word.trim().includes(" ") || isAcronymCandidate(input.word)
 
   const synonymsInstruction =
     synonymsLevel === 0
-      ? `NÃO gere sinônimos ou antônimos. Retorne "synonyms": [] e "antonyms": [].`
-      : `Forneça até ${synonymsLevel} sinônimos e até ${synonymsLevel} antônimos em INGLÊS que correspondam ao sentido EXATO implícito pela nova tradução.`
+      ? `Do NOT generate synonyms or antonyms. Return "synonyms": [] and "antonyms": [].`
+      : `Provide up to ${synonymsLevel} synonym(s) and up to ${synonymsLevel} antonym(s) in ENGLISH that match EXACTLY the same part of speech AND meaning context implied by the new translation.`
 
   const alternativeFormsInstruction = includeAlternativeForms && !isCompoundOrAcronym
-    ? `FORMAS ALTERNATIVAS: SEMPRE QUE POSSÍVEL, inclua até 2 formas derivadas.
-   - PROIBIDO usar "partOfSpeech" = "phrase" ou "acronym".
-   - Cada "word" deve ser UMA PALAVRA (sem espaços e sem sigla).
-   - A classe gramatical deve ser diferente da classe principal.
-   - Cada item deve ser derivação real e dicionarizada da mesma raiz. NÃO invente palavras e NÃO use palavras apenas parecidas (ex.: "quite" x "quiet").
-   - Forneça tradução SECA em PORTUGUÊS BRASILEIRO (com artigo para substantivos) e um exemplo em INGLÊS.
-   - PROIBIDO meta-definições ("o ato de...").`
-    : `Sempre retorne "alternativeForms": [].`
+    ? `ALTERNATIVE FORMS: Follow STRICT morphological rules.
+- PROHIBITED partOfSpeech values: "phrase" or "acronym".
+- REAL DERIVATIONS ONLY: List only words that share the SAME ROOT and exist in official English dictionaries. PROHIBITED: Do NOT invent words.
+- PROHIBITED: Do NOT group words by mere spelling similarity (e.g., "quite" vs "quiet" are independent words).
+- Provide a DRY TRANSLATION (with article for nouns) and an example sentence in English.`
+    : `Always return "alternativeForms": [].`
 
   const usageNoteInstruction = includeUsageNote
-    ? `NOTA DE USO (opcional): Seja ULTRA CONCISO e DIRETO AO PONTO (estilo flashcard, máx 2 a 4 linhas curtas). 
-   - PROIBIDO usar introduções narrativas (NÃO escreva "A palavra descreve..."). Vá direto para a regra.
-   - Use FORMATAÇÃO EM BLOCOS com QUEBRA DE LINHA, no padrão "Rótulo: conteúdo".
-   - Exemplo de formato aceito:
-     Uso principal: ...
-     Nuance: ...
-     Estrutura comum: ...
-   - SE FOR SIGLA, escreva o que as letras significam em inglês.
-   - Use ortografia do Português Brasileiro atual (Acordo Ortográfico vigente; ex.: "ideia", "assembleia", sem trema).
-   - Se não tiver nuance especial, retorne "".`
-    : `NOTA DE USO: NÃO gere notas de uso. Sempre retorne "usageNote": "".`
+    ? `USAGE NOTE (Brazilian Portuguese, 2009 Orthographic Agreement):
+Be ULTRA CONCISE and DIRECT (2–3 short sentences maximum).
+- PROHIBITED: Markdown syntax (**, *, #), line breaks, or bullet points. Continuous plain text only.
+- ZERO-FLUFF RULE (CRITICAL): DO NOT state the obvious. If the word is a basic object, animal, color, common action, or everyday 1:1 translation, YOU MUST RETURN "usageNote": "".
+- ONLY write a usage note IF AND ONLY IF there is a high risk of confusion for Brazilian learners (false cognates, modals, etc).
+- Write naturally. You MAY use short inline labels like "Nuance:" to introduce a secondary use, but DO NOT repeat the word "Nuance:" multiple times.`
+    : `USAGE NOTE: Do NOT generate a usage note. Always return "usageNote": "".`
+
+  const contextPolicyInstruction =
+    contextMode === "always"
+      ? `CONTEXT POLICY: Keep "usageNote" for all entries.`
+      : `CONTEXT POLICY: Keep "usageNote" only when there is real learner value (false cognate, modal/idiomatic function, register shift, or technical maritime contrast). For straightforward 1:1 concrete vocabulary, return "usageNote": "". However, ALWAYS generate the example fields.`
 
   const efommInstruction = efommMode
-    ? `MODO EFOMM (MARÍTIMO): Dê preferência a contextos navais e marítimos se for plausível. Se alterar o significado, aponte isso na "usageNote" de forma direta e curta.
-   - Para siglas/termos técnicos de água de lastro (ex: CWQ, BWMS), priorize terminologia operacional consagrada e evite tradução literal forçada.`
+    ? `EFOMM MODE (MARITIME): Prefer naval/port contexts if plausible and reflect this in "usageNote". Avoid forced literal translations for technical terms.`
     : ``
 
   const messages: OpenRouterMessage[] = [
     {
       role: "system",
-      content: `Você é um professor sênior de Inglês Americano ensinando falantes de Português Brasileiro.
+      content: `You are a senior American English professor teaching Brazilian Portuguese speakers.
 
+LANGUAGE RULES:
+- Reason in English.
+- All Portuguese-facing fields ("translation", "usageNote", "exampleTranslation") MUST follow the 2009 New Orthographic Agreement.
 ${efommInstruction}
 
-Você receberá:
-- uma palavra/sigla em inglês
-- uma classe gramatical fixa
-- uma NOVA tradução em português
+You will receive:
+- A word/acronym in English
+- A fixed part of speech
+- A NEW translation in Portuguese
 
-Sua tarefa:
-- Mantenha a palavra e classe gramatical idênticas.
-- Atualize os campos para ficarem consistentes com a NOVA tradução.
+Your task:
+- Keep the word and part of speech unchanged.
+- Update ALL fields to be fully consistent with the NEW translation.
+- The received partOfSpeech is mandatory. Do NOT mix other usages in the main context.
+- MANDATORY SYNC: The "example" sentence MUST perfectly align with the NEW translation. NEVER leave example fields empty.
+- If the received partOfSpeech is "acronym", translation MUST be a single form (NO slash separators).
 
-Regras:
-- "translation" DEVE ser retornada exatamente como fornecida.
-- Sinônimos/antônimos (em inglês) DEVEM incluir um tipo: "literal" | "figurative" | "slang" | "abstract".
-- Fidelidade: Liste apenas sinônimos e exemplos que se encaixem perfeitamente nesse novo sentido.
-- A classe recebida é mandatória para todo o card. NÃO misture outros usos de classe gramatical diferente no contexto principal.
+Synonyms instruction: ${synonymsInstruction}
+Usage note instruction: ${usageNoteInstruction}
+Alternative forms instruction: ${alternativeFormsInstruction}
+${contextPolicyInstruction}
 
-Instrução de sinônimos/antônimos: ${synonymsInstruction}
-Instrução de nota de uso: ${usageNoteInstruction}
-Instrução de formas alternativas: ${alternativeFormsInstruction}
+══════════════════════════════════════════
+MANDATORY SELF-REVIEW (complete before outputting)
+══════════════════════════════════════════
+Before outputting, you MUST fill a concise "_internalReview" object first, then correct issues in official fields:
+1. CONSISTENCY: Is every field (example, synonyms, usageNote) consistent with the NEW translation and the given partOfSpeech?
+2. TRANSLATION SYNC: Does the example sentence naturally illustrate the new translation, including idiom/modal patterns?
+3. SYNONYM ACCURACY: Do all synonyms/antonyms match the same POS and new meaning context?
+4. ALTERNATIVE FORMS VALIDITY: Does every word in "alternativeForms" exist in official dictionaries?
+5. USAGE NOTE FORMATTING: Is "usageNote" plain text with no markdown, no line breaks, no bullet points?
+6. PORTUGUESE ORTHOGRAPHY: Does all Portuguese text follow the 2009 agreement?
+7. ZERO-FLUFF AUDIT: Is this a basic, everyday 1:1 vocabulary word? If YES, you MUST clear the "usageNote" field to "".
 
-Retorne o JSON exato:
+Rules for "_internalReview":
+- Keep it SHORT and STRUCTURED only.
+- Include exactly one check item per rule with "pass"/"fail" and a brief "fixApplied" note.
+- If any check is "fail", fix the corresponding official field before final output.
+- Set "finalStatus" to "pass" only if all checks pass after fixes.
+Output ONLY the corrected JSON.
+
+Return the exact JSON:
 {
-  "translation": "tradução fornecida pelo usuário",
-  "usageNote": "nota super direta em português",
-  "synonyms": [{"word": "x", "type": "literal" | "figurative" | "slang" | "abstract"}],
-  "antonyms": [{"word": "y", "type": "literal" | "figurative" | "slang" | "abstract"}],
-  "example": "Frase de exemplo em Inglês",
-  "exampleTranslation": "Tradução natural da frase",
+  "_internalReview": {
+    "finalStatus": "pass|fail",
+    "checks": [
+      {"rule": "zero_fluff_audit", "status": "pass|fail", "fixApplied": "short note"},
+      {"rule": "consistency", "status": "pass|fail", "fixApplied": "short note"},
+      {"rule": "translation_sync", "status": "pass|fail", "fixApplied": "short note"},
+      {"rule": "synonym_accuracy", "status": "pass|fail", "fixApplied": "short note"},
+      {"rule": "alternative_forms_validity", "status": "pass|fail", "fixApplied": "short note"},
+      {"rule": "usage_note_format", "status": "pass|fail", "fixApplied": "short note"},
+      {"rule": "ptbr_orthography", "status": "pass|fail", "fixApplied": "short note"}
+    ]
+  },
+  "translation": "translation provided by the user",
+  "usageNote": "plain Brazilian Portuguese text, no markdown",
+  "synonyms": [{"word": "x", "type": "literal|figurative|slang|abstract"}],
+  "antonyms": [{"word": "y", "type": "literal|figurative|slang|abstract"}],
+  "example": "Example sentence in American English.",
+  "exampleTranslation": "Natural Brazilian Portuguese translation.",
   "alternativeForms": [{"word": "form", "partOfSpeech": "noun", "translation": "o/a ...", "example": "..." }]
-}`,
+}`
     },
     {
       role: "user",
@@ -872,17 +1670,31 @@ Retorne o JSON exato:
     },
   ]
 
-  const raw = await callOpenRouter<FlashcardRevisionResponse>(messages, model, { type: "json_object" }, {
+  const raw = await callOpenRouter<FlashcardRevisionResponseWithReview>(messages, model, { type: "json_object" }, {
     temperature: 0.2,
   })
 
-  return normalizeRevisionResponse(raw, {
+  const normalized = normalizeRevisionResponse(raw, {
     word: input.word,
     partOfSpeech: input.partOfSpeech,
     includeAlternativeForms,
     synonymsLevel,
     isCompoundOrAcronym,
+    contextMode,
+    efommMode,
   })
+
+  logRevisionAudit("revise", {
+    word: input.word,
+    partOfSpeech: input.partOfSpeech,
+    translation: normalized.translation,
+    usageNote: normalized.usageNote ?? "",
+    example: normalized.example,
+    exampleTranslation: normalized.exampleTranslation,
+    internalReview: raw._internalReview,
+  })
+
+  return normalized
 }
 
 export async function generateGrammarExercises(

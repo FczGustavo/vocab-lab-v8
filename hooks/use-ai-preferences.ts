@@ -8,8 +8,10 @@ const INCLUDE_ALTERNATIVE_FORMS_KEY = "vocablab_include_alternative_forms"
 const INCLUDE_USAGE_NOTE_KEY = "vocablab_include_usage_note"
 const EFOMM_MODE_KEY = "vocablab_efomm_mode"
 const INCLUDE_MULTIPLE_TRANSLATIONS_KEY = "vocablab_include_multiple_translations"
+const CONTEXT_DETAIL_MODE_KEY = "vocablab_context_detail_mode"
 
 export type SynonymsLevel = 0 | 1 | 2 | 3
+export type ContextDetailMode = "smart" | "always"
 
 function clampSynonymsLevel(value: number): SynonymsLevel {
   if (value <= 0) return 0
@@ -23,6 +25,7 @@ export function useAiPreferences() {
   const [includeConjugations, setIncludeConjugationsState] = useState(false)
   const [includeAlternativeForms, setIncludeAlternativeFormsState] = useState(true)
   const [includeUsageNote, setIncludeUsageNoteState] = useState(true)
+  const [contextDetailMode, setContextDetailModeState] = useState<ContextDetailMode>("smart")
   const [efommMode, setEfommModeState] = useState(true)
   const [includeMultipleTranslations, setIncludeMultipleTranslationsState] = useState(true)
   const [isLoaded, setIsLoaded] = useState(false)
@@ -49,6 +52,11 @@ export function useAiPreferences() {
     const savedUsageNote = localStorage.getItem(INCLUDE_USAGE_NOTE_KEY)
     if (savedUsageNote !== null) {
       setIncludeUsageNoteState(savedUsageNote === "true")
+    }
+
+    const savedContextDetailMode = localStorage.getItem(CONTEXT_DETAIL_MODE_KEY)
+    if (savedContextDetailMode === "smart" || savedContextDetailMode === "always") {
+      setContextDetailModeState(savedContextDetailMode)
     }
 
     const savedEfomm = localStorage.getItem(EFOMM_MODE_KEY)
@@ -85,6 +93,11 @@ export function useAiPreferences() {
     localStorage.setItem(INCLUDE_USAGE_NOTE_KEY, String(value))
   }, [])
 
+  const setContextDetailMode = useCallback((value: ContextDetailMode) => {
+    setContextDetailModeState(value)
+    localStorage.setItem(CONTEXT_DETAIL_MODE_KEY, value)
+  }, [])
+
   const setEfommMode = useCallback((value: boolean) => {
     setEfommModeState(value)
     localStorage.setItem(EFOMM_MODE_KEY, String(value))
@@ -104,6 +117,8 @@ export function useAiPreferences() {
     setIncludeAlternativeForms,
     includeUsageNote,
     setIncludeUsageNote,
+    contextDetailMode,
+    setContextDetailMode,
     efommMode,
     setEfommMode,
     includeMultipleTranslations,

@@ -26,7 +26,9 @@ import {
   AlertDialogTrigger,
 } from "@/components/ui/alert-dialog"
 import { Input } from "@/components/ui/input"
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { useGrammarProgress } from "@/hooks/use-grammar-progress"
+import { useGptModel, AVAILABLE_MODELS } from "@/hooks/use-gpt-model"
 import { useAnimations } from "@/hooks/use-animations"
 import { useAiPreferences } from "@/hooks/use-ai-preferences"
 import { useSyncCode } from "@/hooks/use-sync-code"
@@ -51,6 +53,8 @@ export function SettingsDialog() {
     setIncludeAlternativeForms,
     includeUsageNote,
     setIncludeUsageNote,
+    contextDetailMode,
+    setContextDetailMode,
     efommMode,
     setEfommMode,
     includeMultipleTranslations,
@@ -58,6 +62,7 @@ export function SettingsDialog() {
   } = useAiPreferences()
   const { syncCode, setSyncCode, regenerate, isValid: isSyncCodeValid } = useSyncCode()
   const { allFlashcards, folders, importAllData } = useFlashcardsDB()
+  const { model, setModel } = useGptModel()
   const [palette, setPalette] = useState<ColorPalette>("blue")
   const [syncBusy, setSyncBusy] = useState<"push" | "pull" | null>(null)
 
@@ -321,6 +326,25 @@ export function SettingsDialog() {
                   </h4>
 
                   <div className="space-y-2">
+                    <Label className="text-sm">Modelo de IA</Label>
+                    <Select value={model} onValueChange={setModel}>
+                      <SelectTrigger className="w-full">
+                        <SelectValue placeholder="Selecione o modelo" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {AVAILABLE_MODELS.map((m) => (
+                          <SelectItem key={m.id} value={m.id}>
+                            {m.label}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                    <p className="text-[10px] text-muted-foreground">
+                      Modelo usado para gerar flashcards. A mudança é aplicada imediatamente.
+                    </p>
+                  </div>
+
+                  <div className="space-y-2">
                     <div className="flex items-center justify-between">
                       <Label className="text-sm">Sinônimos e Antônimos</Label>
                       <span className="text-xs font-bold text-primary tabular-nums">
@@ -370,6 +394,24 @@ export function SettingsDialog() {
                     </div>
                     <Switch checked={includeUsageNote} onCheckedChange={setIncludeUsageNote} />
                   </div>
+
+                  {includeUsageNote && (
+                    <div className="space-y-2">
+                      <Label className="text-sm">Detalhe do contexto</Label>
+                      <Select value={contextDetailMode} onValueChange={(v) => setContextDetailMode(v as "smart" | "always")}>
+                        <SelectTrigger className="w-full">
+                          <SelectValue placeholder="Escolha o modo" />
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="smart">Econômico (recomendado)</SelectItem>
+                          <SelectItem value="always">Completo (sempre mostrar)</SelectItem>
+                        </SelectContent>
+                      </Select>
+                      <p className="text-[10px] text-muted-foreground">
+                        Econômico mostra contexto apenas quando há ambiguidade real, pegadinha para brasileiros ou contraste técnico (EFOMM).
+                      </p>
+                    </div>
+                  )}
 
                   <div className="flex items-center justify-between pt-1">
                     <div className="space-y-0.5">
