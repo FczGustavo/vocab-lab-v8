@@ -135,7 +135,7 @@ function parseUsageNoteBlocks(note: string): Array<{ label: string | null; text:
   }
 
   const labelPattern =
-    /(Principais usos?|Principal uso|Uso principal|Prefer[eê]ncia(?:\s*\/\s*Alternativa)?|Nuance|Outro uso|Estrutura comum|Estrutura|Intensificador|Atenuador|Contraste|Como\s+[A-Za-zÀ-ÿ]+)/gi
+    /(Principais usos?|Principal uso|Uso principal|Prefer[eê]ncia(?:\s*\/\s*Alternativa)?|Nuance|Outro uso|Estrutura comum|Estrutura|Intensificador|Atenuador|Contraste|Como\s+[A-Za-zÀ-ÿ]+)\s*(?:\(([^)]+)\))?\s*[:\-]/gi
 
   const normalized = normalizeContextText(note.replace(/\r\n/g, "\n").replace(/\n+/g, " "))
   if (!normalized) return []
@@ -155,16 +155,9 @@ function parseUsageNoteBlocks(note: string): Array<{ label: string | null; text:
 
   matches.forEach((match, idx) => {
     const labelStart = match.index ?? 0
-    const labelText = match[0]
-    const afterLabel = normalized.slice(labelStart + labelText.length)
-    const detailMatch = afterLabel.match(/^\s*\(([^)]+)\)/)
-    const detail = detailMatch?.[1] || ""
-
-    const contentStart =
-      labelStart +
-      labelText.length +
-      (detailMatch ? detailMatch[0].length : 0) +
-      (afterLabel.slice(detailMatch ? detailMatch[0].length : 0).match(/^\s*[:\-]/)?.[0].length || 0)
+    const labelText = normalizeContextText(match[1] || "")
+    const detail = normalizeContextText(match[2] || "")
+    const contentStart = labelStart + match[0].length
 
     const nextStart = idx < matches.length - 1 ? (matches[idx + 1].index ?? normalized.length) : normalized.length
     const content = normalizeContextText(normalized.slice(contentStart, nextStart))
