@@ -444,6 +444,11 @@ function normalizePtBrOrthographyMultiline(value: unknown): string {
     "Como Advérbio",
     "Como Substantivo",
     "Como Verbo",
+    "Como Preposição",
+    "Como Conjunção",
+    "Como Interjeição",
+    "Como Expressão",
+    "Como Sigla",
   ]
 
   let withBreaks = normalized
@@ -481,6 +486,154 @@ function getUsagePrimaryLabel(partOfSpeech: string): string {
   }
 }
 
+function getPartOfSpeechPtName(partOfSpeech: string): string {
+  switch (partOfSpeech) {
+    case "verb":
+      return "verbo"
+    case "noun":
+      return "substantivo"
+    case "adjective":
+      return "adjetivo"
+    case "adverb":
+      return "advérbio"
+    case "preposition":
+      return "preposição"
+    case "conjunction":
+      return "conjunção"
+    case "interjection":
+      return "interjeição"
+    case "phrase":
+      return "expressão"
+    case "acronym":
+      return "sigla"
+    default:
+      return "classe"
+  }
+}
+
+function normalizeForLooseMatch(value: string): string {
+  return normalizeInlineWhitespace(value)
+    .toLowerCase()
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+}
+
+function getTranslationChunksForUsageMatch(translation: string): string[] {
+  const chunks = normalizeTranslationText(translation)
+    .split("/")
+    .map((item) => normalizeForLooseMatch(item))
+    .map((item) => item.replace(/^(o|a|os|as|um|uma|uns|umas)\s+/, ""))
+    .map((item) => item.replace(/["'()]/g, "").trim())
+    .filter(Boolean)
+
+  return chunks.filter((item, index, arr) => arr.indexOf(item) === index)
+}
+
+function isPrimaryUsageLineRedundant(line: string, partOfSpeech: string, translation: string): boolean {
+  const match = line.match(/^([^:]{2,40}):\s*(.+)$/)
+  if (!match) return false
+
+  const label = normalizeForLooseMatch(match[1])
+  const content = normalizeForLooseMatch(match[2])
+  const primaryLabel = normalizeForLooseMatch(getUsagePrimaryLabel(partOfSpeech))
+
+  const isPrimaryLine =
+    label === primaryLabel ||
+    label === "uso principal" ||
+    label === "principal" ||
+    label.startsWith("como ")
+
+  if (!isPrimaryLine) return false
+
+  const translationChunks = getTranslationChunksForUsageMatch(translation)
+  if (translationChunks.length === 0) return false
+
+  const repeatsMainMeaning = translationChunks.some((chunk) => content.includes(chunk))
+  const definesPrimarySense = /(pode significar|significa|sentido descritivo|neste contexto|aqui e)/.test(content)
+
+  return repeatsMainMeaning && definesPrimarySense
+}
+
+function buildSecondarySenseUsageLine(word: string, partOfSpeech: string): string {
+  const alternatives = getFallbackCrossPosAlternativeForms(word, partOfSpeech)
+  if (alternatives.length === 0) return ""
+
+  const secondary = alternatives[0]
+  const className = getPartOfSpeechPtName(secondary.partOfSpeech)
+  return `Nuance: Também pode atuar como ${className}, com sentido de ${secondary.translation}.`
+}
+
+function getUsageLineContent(line: string): string {
+  const match = line.match(/^([^:]{2,40}):\s*(.+)$/)
+  return normalizeForLooseMatch(match ? match[2] : line)
+}
+
+function isSecondarySenseUsageLine(line: string): boolean {
+  const normalized = normalizeForLooseMatch(line)
+  return /(nuance:|tambem pode|tamb[eé]m pode|intensificador|como adverbio|como adv[eé]rbio|outro uso:)/.test(normalized)
+}
+
+function dedupeSecondarySenseLines(lines: string[]): string[] {
+  if (lines.length <= 1) return lines
+
+  const uniqueByContent: string[] = []
+  const seen = new Set<string>()
+
+  for (const line of lines) {
+    const key = getUsageLineContent(line)
+      .replace(/\b(pretty|hard|fast|late|well|right|left)\b/g, "")
+      .replace(/\s+/g, " ")
+      .trim()
+
+    if (!key) continue
+    if (seen.has(key)) continue
+    seen.add(key)
+    uniqueByContent.push(line)
+  }
+
+  if (uniqueByContent.length <= 1) return uniqueByContent
+
+  const nuanceLine = uniqueByContent.find((line) => /^\s*Nuance:/i.test(line))
+  if (nuanceLine) return [nuanceLine]
+
+  return [uniqueByContent[0]]
+}
+
+function removeRedundantPrimaryUsageAndPromoteSecondary(params: {
+  usageNote: string
+  word: string
+  partOfSpeech: string
+  translation: string
+}): string {
+  const lines = params.usageNote
+    .split("\n")
+    .map((line) => normalizeInlineWhitespace(line))
+    .filter(Boolean)
+
+  if (lines.length === 0) return ""
+
+  const filtered = lines.filter((line) => !isPrimaryUsageLineRedundant(line, params.partOfSpeech, params.translation))
+  let result = filtered.length > 0 ? filtered : []
+
+  const secondaryLines = result.filter((line) => isSecondarySenseUsageLine(line))
+  if (secondaryLines.length > 1) {
+    const nonSecondary = result.filter((line) => !isSecondarySenseUsageLine(line))
+    const compactSecondary = dedupeSecondarySenseLines(secondaryLines)
+    result = [...nonSecondary, ...compactSecondary]
+  }
+
+  const hasSecondarySignal = result.some((line) => /nuance:|tamb[eé]m pode atuar como|outro uso:/i.test(line))
+  if (!hasSecondarySignal) {
+    const secondaryLine = buildSecondarySenseUsageLine(params.word, params.partOfSpeech)
+    if (secondaryLine) {
+      result.push(secondaryLine)
+    }
+  }
+
+  if (result.length === 0) return params.usageNote
+  return result.slice(0, 3).join("\n")
+}
+
 function stripLeadingConjunction(value: string): string {
   return value.replace(/^(mas|por[eé]m|entretanto|todavia|s[oó] que)\b[\s,:-]*/i, "")
 }
@@ -501,69 +654,56 @@ function normalizeUsageSentence(value: string): string {
   return text.replace(/[.!?]$/, "").trim()
 }
 
-function normalizeUsageNoteByPartOfSpeech(value: unknown, partOfSpeech: string): string {
+function enrichVagueUsageByPartOfSpeech(text: string, partOfSpeech: string): string {
+  let normalized = normalizeInlineWhitespace(text)
+  if (!normalized) return ""
+
+  // Make vague cross-POS adverb explanations more concrete.
+  if (/(como\s+adv[eé]rbio)/i.test(normalized) && /(sentido\s+de\s+quase|\bquase\b)/i.test(normalized)) {
+    if (!/(bastante|razoavelmente|quase nunca|raramente)/i.test(normalized)) {
+      normalized = normalized.replace(
+        /(como\s+adv[eé]rbio[^.:]*)([.:]?)/i,
+        "$1 (ex.: bastante / razoavelmente)$2"
+      )
+    }
+  }
+
+  // Keep wording explicit for major classes when content is too generic.
+  if (partOfSpeech === "adverb" && /(muito vago|sentido amplo|depende do contexto)/i.test(normalized)) {
+    normalized = `${normalized} Prefira equivalentes diretos de uso: bastante, razoavelmente, raramente, dificilmente.`
+  }
+
+  return normalizeInlineWhitespace(normalized)
+}
+
+function normalizeUsageNoteByPartOfSpeech(value: unknown, partOfSpeech: string, word?: string, translation?: string): string {
   const raw = normalizePtBrOrthographyMultiline(value)
   if (!raw) return ""
 
   const cleaned = raw
     .replace(/[“”]/g, '"')
     .replace(/[‘’]/g, "'")
+    .replace(/\bn[aã]o\s+confundir\s+os\s+dois\s+usos\b[.!]?/gi, "")
+    .replace(/\bn[aã]o\s+confundir\b[^.?!]*[.?!]?/gi, "")
+    .replace(/\b(Como\s+[A-Za-zÀ-ÿ]+|Nuance|Estrutura\s+comum|Estrutura|Prefer[eê]ncia(?:\s*\/\s*Alternativa)?|Contraste|Outro\s+uso|Intensificador|Atenuador|Uso\s+principal|Principais\s+usos?)\s*:\s*/gi, "")
     .replace(/\s+/g, " ")
     .trim()
 
-  const primaryLabel = getUsagePrimaryLabel(partOfSpeech)
+  const enriched = enrichVagueUsageByPartOfSpeech(cleaned, partOfSpeech)
+  if (!enriched) return ""
 
-  // If model already returned labeled blocks, keep them but normalize line breaks and whitespace.
-  if (/:/.test(cleaned) && /(como|uso|nuance|estrutura|intensificador|atenuador|prefer[eê]ncia|contraste)/i.test(cleaned)) {
-    const rawBlocks = cleaned
-      .replace(/\s+([A-Za-zÀ-ÿ][^:\n]{2,40}:)/g, "\n$1")
-      .split("\n")
-      .map((line) => normalizeInlineWhitespace(line))
-      .filter(Boolean)
-      .slice(0, 10)
-
-    const blocks: string[] = rawBlocks.map((line) => {
-      const labelMatch = line.match(/^([^:]{2,40}):\s*(.+)$/)
-      if (!labelMatch) return normalizeUsageSentence(line)
-
-      const label = normalizeInlineWhitespace(labelMatch[1])
-      const content = normalizeUsageSentence(labelMatch[2])
-      const lowerLabel = label.toLowerCase()
-      const isPrimary =
-        lowerLabel === primaryLabel.toLowerCase() ||
-        lowerLabel === "uso principal" ||
-        lowerLabel === "principal"
-
-      // First line should not duplicate the card tag label.
-      return isPrimary ? content : `${label}: ${content}`
-    }).filter(Boolean)
-
-    if (blocks.length > 0) return blocks.join("\n")
-  }
-
-  const normalizedForSplit = cleaned
+  const normalizedForSplit = enriched
     .replace(/\s+(Mas|Por[eé]m|Tamb[eé]m|Em fala|No uso informal|Na fala)\b/gi, ". $1")
     .replace(/\.+/g, ".")
 
   const sentences = normalizedForSplit
     .split(/(?<=[.!?])\s+/)
-    .map((s) => s.trim())
+    .map((s) => normalizeUsageSentence(s))
     .filter(Boolean)
 
   if (sentences.length === 0) return ""
 
-  const lines: string[] = []
-  lines.push(`${normalizeUsageSentence(sentences[0])}.`)
-
-  if (sentences[1]) {
-    lines.push(`Nuance: ${normalizeUsageSentence(sentences[1])}.`)
-  }
-
-  if (sentences[2]) {
-    lines.push(`Estrutura comum: ${normalizeUsageSentence(sentences[2])}.`)
-  }
-
-  return lines.slice(0, 3).join("\n")
+  return sentences.slice(0, 2).map((s) => `${s}.`).join(" ")
 }
 
 function normalizePartOfSpeech(value: unknown, fallback: string = "noun"): string {
@@ -697,6 +837,92 @@ function isLikelyDerivation(mainWord: string, candidateWord: string): boolean {
   return false
 }
 
+function isLikelyCrossPosPolysemyWord(word: string): boolean {
+  const normalized = normalizeInlineWhitespace(word).toLowerCase()
+  if (!normalized) return false
+
+  const commonCrossPos = new Set([
+    "pretty",
+    "hard",
+    "fast",
+    "late",
+    "right",
+    "left",
+    "well",
+    "clean",
+    "close",
+    "clear",
+    "direct",
+    "early",
+    "daily",
+    "weekly",
+    "monthly",
+    "yearly",
+    "fair",
+    "light",
+    "sound",
+    "even",
+    "still",
+  ])
+
+  return commonCrossPos.has(normalized)
+}
+
+function getFallbackCrossPosAlternativeForms(mainWord: string, mainPartOfSpeech: string) {
+  const normalizedWord = normalizeInlineWhitespace(mainWord).toLowerCase()
+  if (!normalizedWord || !isLikelyCrossPosPolysemyWord(normalizedWord)) return []
+
+  const fallbackMap: Record<string, Array<{ partOfSpeech: string; translation: string; example: string }>> = {
+    pretty: [
+      {
+        partOfSpeech: "adverb",
+        translation: "bastante / razoavelmente",
+        example: "The movie was pretty good.",
+      },
+      {
+        partOfSpeech: "noun",
+        translation: "o enfeite",
+        example: "She bought a pretty for her hat.",
+      },
+    ],
+    hard: [
+      {
+        partOfSpeech: "adverb",
+        translation: "com força / intensamente",
+        example: "He works hard every day.",
+      },
+      {
+        partOfSpeech: "noun",
+        translation: "a parte sólida",
+        example: "The hard of the tree was exposed.",
+      },
+    ],
+    fast: [
+      {
+        partOfSpeech: "adverb",
+        translation: "rapidamente",
+        example: "She ran fast to catch the bus.",
+      },
+      {
+        partOfSpeech: "verb",
+        translation: "jejuar",
+        example: "Many people fast for religious reasons.",
+      },
+    ],
+  }
+
+  const candidates = fallbackMap[normalizedWord] ?? []
+  return candidates
+    .filter((item) => item.partOfSpeech !== mainPartOfSpeech)
+    .slice(0, 2)
+    .map((item) => ({
+      word: normalizeInlineWhitespace(mainWord),
+      partOfSpeech: item.partOfSpeech,
+      translation: normalizePtBrOrthography(item.translation),
+      example: normalizeInlineWhitespace(item.example),
+    }))
+}
+
 function normalizeAlternativeForms(
   raw: unknown,
   mainWord: string,
@@ -704,7 +930,12 @@ function normalizeAlternativeForms(
   includeAlternativeForms: boolean,
   isCompoundOrAcronym: boolean
 ) {
-  if (!includeAlternativeForms || isCompoundOrAcronym || !Array.isArray(raw)) return []
+  if (!includeAlternativeForms || isCompoundOrAcronym) return []
+
+  const fallbackAlternatives = getFallbackCrossPosAlternativeForms(mainWord, mainPartOfSpeech)
+  if (!Array.isArray(raw)) {
+    return fallbackAlternatives
+  }
 
   const seen = new Set<string>()
   const normalized = raw
@@ -752,7 +983,10 @@ function normalizeAlternativeForms(
   }
 
   // Fallback: if model missed POS conversion but produced real derivations, keep them.
-  return normalized.slice(0, 2)
+  const derivationalFallback = normalized.slice(0, 2)
+  if (derivationalFallback.length > 0) return derivationalFallback
+
+  return fallbackAlternatives
 }
 
 function normalizeConjugations(raw: unknown): FlashcardAIResponse["conjugations"] {
@@ -972,6 +1206,8 @@ function shouldSuppressUsageAndExample(params: {
   const isTrapWord = isLikelyBrazilianLearnerTrapWord(params.word)
   if (isTrapWord) return false
 
+  if (isLikelyCrossPosPolysemyWord(params.word)) return false
+
   const note = normalizeInlineWhitespace(params.usageNote)
   const hasDoNotConfuse = /n[aã]o confundir/i.test(note)
   const hasHighValueInterpretationSplit =
@@ -1104,7 +1340,7 @@ function normalizeFlashcardResponse(
     partOfSpeech
   )
   const translation = normalizePtBrOrthography(normalizeTranslationByLexicalGuards(normalizedWord, translationByPartOfSpeech))
-  const usageNote = normalizeUsageNoteByPartOfSpeech(raw?.usageNote, partOfSpeech)
+  const usageNote = normalizeUsageNoteByPartOfSpeech(raw?.usageNote, partOfSpeech, normalizedWord, translation)
   const example = normalizeInlineWhitespace(raw?.example)
   const exampleTranslation = normalizePtBrOrthography(raw?.exampleTranslation)
 
@@ -1186,7 +1422,12 @@ function normalizeRevisionResponse(
       ? pickPrimaryTranslation(normalizedTranslation)
       : normalizedTranslation
   )
-  const usageNote = normalizeUsageNoteByPartOfSpeech(raw?.usageNote, normalizedPartOfSpeech)
+  const usageNote = normalizeUsageNoteByPartOfSpeech(
+    raw?.usageNote,
+    normalizedPartOfSpeech,
+    normalizeInlineWhitespace(options.word),
+    translation
+  )
   const synonyms = normalizeLexicalRelations(raw?.synonyms, options.synonymsLevel)
   const antonyms = normalizeLexicalRelations(raw?.antonyms, options.synonymsLevel)
   const example = normalizeInlineWhitespace(raw?.example)
@@ -1432,10 +1673,10 @@ Be ULTRA CONCISE and DIRECT (flashcard style, 2–3 short sentences maximum).
 - ONLY write a usage note IF AND ONLY IF there is a high risk of confusion for Brazilian learners: false cognates (e.g., "actually"), tricky modals ("rather"), preposition mismatches ("depend on"), strict maritime technical jargon, or HOMOGRAPH TRAPS (see below).
 - PHRASE RULE: If partOfSpeech is "phrase", prefer keeping a short usage note that explains the idiomatic meaning, tone, register, regional force, or why a literal translation would mislead the learner.
 - TECHNICAL TERM RULE: If the entry is a technical expression or acronym/sigla (e.g., CWQ), you MUST include a short defining usage note whenever the technical specificity is needed to understand the term. Example: "CWQ significa Challenging Water Quality: águas com altos níveis de contaminantes que tornam o tratamento convencional difícil ou ineficiente."
-- When a usage note is needed, prefer a block-like sequence with short inline titles (e.g., "Preferência:", "Nuance:", "Contraste:", "Estrutura:") so each idea is clearly separated.
+- When a usage note is needed, write a short plain-text explanation in 1–2 direct sentences.
 - HOMOGRAPH TRAP RULE: If the word is a verb that shares its spelling with another verb of completely different etymology and conjugation pattern (e.g., "lie" = mentir [regular: lied/lied] vs "lie" = deitar [irregular: lay/lain]), you MUST include a usage note warning: state the meaning being translated, its conjugation pattern (regular/irregular), and briefly contrast with the other homograph's meaning and conjugation. Example: "Este 'lie' significa mentir e é regular (lied/lied). Não confundir com 'lie' = deitar, que é irregular (lay/lain)."
 - VERSATILE ADVERB RULE: For highly versatile adverbs (especially "rather"), prefer this compact structure in PT-BR: "Advérbio versátil. Principais usos: Preferência: ... Intensificador: ... Contraste: ...". Keep it plain text and concise.
-- If generating a note, write naturally. You MAY use short inline labels like "Nuance:" to introduce a secondary use, but DO NOT repeat the word "Nuance:" multiple times in the same text.
+- If generating a note, write naturally and avoid section labels.
 - If the word is an ACRONYM, MANDATORY: spell out what each letter stands for (in English), then explain the meaning in Portuguese.`
     : `STEP 3 — USAGE NOTE: Do NOT generate a usage note. Always return "usageNote": "".`
 
@@ -1687,9 +1928,9 @@ Be ULTRA CONCISE and DIRECT (2–3 short sentences maximum).
 - ONLY write a usage note IF AND ONLY IF there is a high risk of confusion for Brazilian learners (false cognates, modals, etc).
 - PHRASE RULE: If the received partOfSpeech is "phrase", prefer keeping a short note that explains idiomatic meaning, tone, register, regional force, or why a literal reading would mislead the learner.
 - TECHNICAL TERM RULE: If the received entry is a technical expression or acronym/sigla, keep a concise defining note whenever the technical specificity is necessary to understand the translation.
-- When a usage note is needed, prefer short labeled chunks (e.g., "Preferência:", "Nuance:", "Contraste:", "Estrutura:") so ideas are visually separated.
+- When a usage note is needed, keep it as plain text in 1–2 direct sentences.
 - For highly versatile adverbs (especially "rather"), prefer this compact format: "Advérbio versátil. Principais usos: Preferência: ... Intensificador: ... Contraste: ...".
-- Write naturally. You MAY use short inline labels like "Nuance:" to introduce a secondary use, but DO NOT repeat the word "Nuance:" multiple times.`
+- Write naturally and avoid section labels.`
     : `USAGE NOTE: Do NOT generate a usage note. Always return "usageNote": "".`
 
   const contextPolicyInstruction =

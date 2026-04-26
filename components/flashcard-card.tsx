@@ -102,88 +102,14 @@ function ClassifiedWordList({
   )
 }
 
-function parseUsageNoteBlocks(note: string): Array<{ label: string | null; text: string }> {
-  const normalizeContextText = (value: string) =>
-    value
-      .replace(/\s+([,.;!?])/g, "$1")
-      .replace(/\(\s+/g, "(")
-      .replace(/\s+\)/g, ")")
-      .replace(/\s*\/\s*/g, " / ")
-      .replace(/\s{2,}/g, " ")
-      .trim()
-
-  const canonicalizeLabel = (label: string, parenthetical?: string): string => {
-    const lower = normalizeContextText(label).toLowerCase()
-    const detail = normalizeContextText(parenthetical || "").toLowerCase()
-
-    if (lower.startsWith("principal uso") && /prefer/.test(detail)) return "Preferência"
-    if (lower === "preferencia" || lower === "preferência") return "Preferência"
-    if (lower.includes("preferência / alternativa") || lower.includes("preferencia / alternativa")) {
-      return "Preferência / Alternativa"
-    }
-    if (lower === "principais usos" || lower === "principal uso" || lower === "uso principal") {
-      return "Principais usos"
-    }
-    if (lower === "como adverbio") return "Como Advérbio"
-
-    return label
-      .split(" ")
-      .map((chunk) => chunk.charAt(0).toUpperCase() + chunk.slice(1))
-      .join(" ")
-  }
-
-  const labelPattern =
-    /(Principais usos?|Principal uso|Uso principal|Prefer[eê]ncia(?:\s*\/\s*Alternativa)?|Nuance|Outro uso|Estrutura comum|Estrutura|Intensificador|Atenuador|Contraste|Como\s+[A-Za-zÀ-ÿ]+)\s*(?:\(([^)]+)\))?\s*[:\-]/gi
-
-  const normalized = normalizeContextText(note.replace(/\r\n/g, "\n").replace(/\n+/g, " "))
-  if (!normalized) return []
-
-  const entries: Array<{ label: string | null; text: string }> = []
-  const matches = [...normalized.matchAll(labelPattern)]
-
-  if (matches.length === 0) {
-    return [{ label: null, text: normalized }]
-  }
-
-  const firstMatch = matches[0]
-  if (firstMatch && firstMatch.index && firstMatch.index > 0) {
-    const prefix = normalizeContextText(normalized.slice(0, firstMatch.index))
-    if (prefix) entries.push({ label: null, text: prefix })
-  }
-
-  matches.forEach((match, idx) => {
-    const labelStart = match.index ?? 0
-    const labelText = normalizeContextText(match[1] || "")
-    const detail = normalizeContextText(match[2] || "")
-    const contentStart = labelStart + match[0].length
-
-    const nextStart = idx < matches.length - 1 ? (matches[idx + 1].index ?? normalized.length) : normalized.length
-    const content = normalizeContextText(normalized.slice(contentStart, nextStart))
-
-    if (!content) return
-
-    entries.push({
-      label: canonicalizeLabel(normalizeContextText(labelText), detail),
-      text: content,
-    })
-  })
-
-  return entries
-}
-
-function ContextBlocks({ blocks }: { blocks: Array<{ label: string | null; text: string }> }) {
-  return (
-    <div className="space-y-1.5">
-      {blocks.map((block, idx) => (
-        <div key={idx} className="text-xs leading-relaxed text-foreground">
-          <p>
-            {block.label ? <span className="mr-1 font-semibold text-primary">{block.label}:</span> : null}
-            <span>{block.text}</span>
-          </p>
-        </div>
-      ))}
-    </div>
-  )
+function normalizeUsageNotePlain(note: string): string {
+  return note
+    .replace(/\r\n/g, "\n")
+    .replace(/\bn[aã]o\s+confundir\b[^.?!]*[.?!]?/gi, "")
+    .replace(/\b(Como\s+[A-Za-zÀ-ÿ]+|Nuance|Estrutura\s+comum|Estrutura|Prefer[eê]ncia|Contraste|Outro\s+uso|Intensificador|Atenuador)\s*:\s*/gi, "")
+    .replace(/\n+/g, " ")
+    .replace(/\s+/g, " ")
+    .trim()
 }
 
 export function FlashcardCard({ flashcard, onDelete, onCreateFromAlternative, onUpdateFlashcard, layout = "grid" }: FlashcardCardProps) {
@@ -204,8 +130,8 @@ export function FlashcardCard({ flashcard, onDelete, onCreateFromAlternative, on
   }
 
   const partOfSpeech = flashcard.partOfSpeech || "noun"
-  const usageBlocks = parseUsageNoteBlocks(flashcard.usageNote || "")
-  const hasContext = includeUsageNote && usageBlocks.length > 0
+  const usageNoteText = normalizeUsageNotePlain(flashcard.usageNote || "")
+  const hasContext = includeUsageNote && usageNoteText.length > 0
   const hasExample = Boolean(flashcard.example?.trim())
   const alternativeForms = includeAlternativeForms
     ? (flashcard.alternativeForms || []).filter(
@@ -403,7 +329,7 @@ export function FlashcardCard({ flashcard, onDelete, onCreateFromAlternative, on
                     </div>
 
                     <CollapsibleContent className="mt-2">
-                      <ContextBlocks blocks={usageBlocks} />
+                      <p className="text-xs leading-relaxed text-foreground">{usageNoteText}</p>
                     </CollapsibleContent>
                   </Collapsible>
                   </div>
@@ -446,7 +372,7 @@ export function FlashcardCard({ flashcard, onDelete, onCreateFromAlternative, on
             <DialogHeader>
               <DialogTitle>Editar tradução</DialogTitle>
               <DialogDescription>
-                Ao salvar, a IA recalcula sinônimos, antônimos, exemplo, contexto e outras formas para condizer com a nova tradução.
+                Ao salvar, a tradução é atualizada diretamente neste card.
               </DialogDescription>
             </DialogHeader>
             <div className="space-y-2">
@@ -754,7 +680,7 @@ export function FlashcardCard({ flashcard, onDelete, onCreateFromAlternative, on
                     </div>
 
                     <CollapsibleContent className="mt-2">
-                      <ContextBlocks blocks={usageBlocks} />
+                      <p className="text-xs leading-relaxed text-foreground">{usageNoteText}</p>
                     </CollapsibleContent>
                 </Collapsible>
               </div>
@@ -770,7 +696,7 @@ export function FlashcardCard({ flashcard, onDelete, onCreateFromAlternative, on
           <DialogHeader>
             <DialogTitle>Editar tradução</DialogTitle>
             <DialogDescription>
-              Ao salvar, a IA recalcula sinônimos, antônimos, exemplo, contexto e outras formas para condizer com a nova tradução.
+              Ao salvar, a tradução é atualizada diretamente neste card.
             </DialogDescription>
           </DialogHeader>
           <div className="space-y-2">
