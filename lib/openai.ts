@@ -483,7 +483,7 @@ function normalizeUsageNoteByPartOfSpeech(value: unknown, partOfSpeech: string):
       .split("\n")
       .map((line) => normalizeInlineWhitespace(line))
       .filter(Boolean)
-      .slice(0, 5)
+      .slice(0, 10)
 
     const blocks: string[] = rawBlocks.map((line) => {
       const labelMatch = line.match(/^([^:]{2,40}):\s*(.+)$/)

@@ -1,7 +1,7 @@
 "use client"
 
 import { useEffect, useState } from "react"
-import { Trash2, Volume2, Pencil, Loader2, Languages, Rotate3D, ChevronDown, ChevronUp } from "lucide-react"
+import { Trash2, Volume2, Loader2, Languages, Rotate3D, ChevronDown, ChevronUp } from "lucide-react"
 import { cn } from "@/lib/utils"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
@@ -374,17 +374,21 @@ export function FlashcardCard({ flashcard, onDelete, onCreateFromAlternative, on
               "grid w-full gap-4 border-t border-border pt-4 animate-in fade-in slide-in-from-top-2 sm:grid-cols-2",
               animationsEnabled ? "duration-300" : "duration-0"
             )}>
-              <div className="space-y-3">
-                <div className="space-y-1.5 pb-10">
-                  <p className="min-w-0 text-lg font-medium leading-snug text-foreground">
+              <div className="space-y-3 pb-12">
+                <div className="space-y-1.5">
+                  <p
+                    className="min-w-0 cursor-pointer text-lg font-medium leading-snug text-foreground"
+                    onClick={(e) => {
+                      e.stopPropagation()
+                      setEditOpen(true)
+                    }}
+                    title="Clique para editar tradução"
+                  >
                     {flashcard.translation}
                   </p>
                 </div>
-                <ClassifiedWordList words={flashcard.synonyms} label="Sinônimos" maxCount={synonymsLevel} />
-                <ClassifiedWordList words={flashcard.antonyms} label="Antônimos" maxCount={synonymsLevel} />
                 {hasExample && (
                   <div>
-                    <span className="text-xs font-medium text-muted-foreground">Exemplo:</span>
                     <p className="text-xs text-foreground italic">{flashcard.example}</p>
                     {flashcard.exampleTranslation && (
                       <div className="mt-1">
@@ -407,9 +411,13 @@ export function FlashcardCard({ flashcard, onDelete, onCreateFromAlternative, on
                     )}
                   </div>
                 )}
+                <ClassifiedWordList words={flashcard.synonyms} label="Sinônimos" maxCount={synonymsLevel} />
+                <ClassifiedWordList words={flashcard.antonyms} label="Antônimos" maxCount={synonymsLevel} />
               </div>
-              {hasContext && (
-                <div className="group/context rounded-lg bg-muted/30 p-3">
+
+              <div className="space-y-3">
+                {hasContext && (
+                  <div className="group/context rounded-lg bg-muted/30 p-3">
                   <Collapsible open={contextExpanded} onOpenChange={setContextExpanded}>
                     <div className="flex items-center justify-between gap-2">
                       <span className="text-[10px] font-bold text-muted-foreground uppercase tracking-widest">
@@ -431,10 +439,10 @@ export function FlashcardCard({ flashcard, onDelete, onCreateFromAlternative, on
                       <ContextBlocks blocks={usageBlocks} />
                     </CollapsibleContent>
                   </Collapsible>
-                </div>
-              )}
-              {includeConjugations && flashcard.conjugations && (
-                <div className="rounded-lg bg-primary/5 p-3">
+                  </div>
+                )}
+                {includeConjugations && flashcard.conjugations && (
+                  <div className="rounded-lg bg-primary/5 p-3">
                   <div className="mb-2 flex items-center justify-between">
                     <span className="text-[10px] font-bold uppercase text-primary/70">Verb Tenses</span>
                     <Button
@@ -459,24 +467,10 @@ export function FlashcardCard({ flashcard, onDelete, onCreateFromAlternative, on
                       <div className="flex justify-between gap-2"><span className="shrink-0 opacity-60">Past Perf.</span><span className="truncate">{flashcard.conjugations.pastPerfect}</span></div>
                     </div>
                   )}
-                </div>
-              )}
+                  </div>
+                )}
+              </div>
             </div>
-          )}
-
-          {isFlipped && (
-            <Button
-              variant="ghost"
-              size="icon"
-              className="absolute bottom-4 left-4 z-10 size-8 shrink-0"
-              onClick={(e) => {
-                e.stopPropagation()
-                setEditOpen(true)
-              }}
-              title="Editar tradução"
-            >
-              <Pencil className="size-4" />
-            </Button>
           )}
         </Card>
 
@@ -648,46 +642,21 @@ export function FlashcardCard({ flashcard, onDelete, onCreateFromAlternative, on
             </div>
           </div>
 
-          <div className="space-y-2.5 flex-1 overflow-y-auto pr-1 pb-12 [scrollbar-gutter:stable]">
+          <div className="space-y-2.5 flex-1 overflow-y-auto pr-1 [scrollbar-gutter:stable]">
             <div className="space-y-1.5">
-              <p className="text-xl font-medium text-foreground leading-snug">
+              <p
+                className="cursor-pointer text-xl font-medium leading-snug text-foreground"
+                onClick={(e) => {
+                  e.stopPropagation()
+                  setEditOpen(true)
+                }}
+                title="Clique para editar tradução"
+              >
                 {flashcard.translation}
               </p>
             </div>
-            {hasContext && (
-              <div className="group/context rounded-xl bg-muted/30 p-3">
-                <Collapsible open={contextExpanded} onOpenChange={setContextExpanded}>
-                    <div className="flex items-center justify-between gap-2">
-                      <span className="text-[10px] font-bold text-muted-foreground uppercase tracking-widest">
-                        Contexto
-                      </span>
-                      <CollapsibleTrigger asChild>
-                        <button
-                          type="button"
-                          className="inline-flex items-center gap-1 text-[10px] font-semibold text-primary opacity-0 transition-opacity group-hover/context:opacity-100 focus-visible:opacity-100"
-                          onClick={(e) => e.stopPropagation()}
-                        >
-                          {contextExpanded ? "Recolher" : "Expandir"}
-                          {contextExpanded ? <ChevronUp className="size-3" /> : <ChevronDown className="size-3" />}
-                        </button>
-                      </CollapsibleTrigger>
-                    </div>
-
-                    <CollapsibleContent className="mt-2">
-                      <ContextBlocks blocks={usageBlocks} />
-                    </CollapsibleContent>
-                </Collapsible>
-              </div>
-            )}
-
-            <ClassifiedWordList words={flashcard.synonyms} label="Sinônimos" maxCount={synonymsLevel} />
-            <ClassifiedWordList words={flashcard.antonyms} label="Antônimos" maxCount={synonymsLevel} />
-
             {hasExample && (
               <div>
-                <span className="text-xs font-medium text-muted-foreground">
-                  Exemplo:
-                </span>
                 <p className="text-sm text-foreground italic mt-0.5">
                   {flashcard.example}
                 </p>
@@ -709,7 +678,6 @@ export function FlashcardCard({ flashcard, onDelete, onCreateFromAlternative, on
                 )}
               </div>
             )}
-
             {includeConjugations && flashcard.conjugations && (
               <div className="pt-2 border-t border-border/50">
                 <div className="flex items-center justify-between mb-2">
@@ -798,20 +766,33 @@ export function FlashcardCard({ flashcard, onDelete, onCreateFromAlternative, on
                 </div>
               </div>
             )}
-          </div>
 
-          <Button
-            variant="ghost"
-            size="icon"
-            className="absolute bottom-4 left-4 z-10 size-8 shrink-0"
-            onClick={(e) => {
-              e.stopPropagation()
-              setEditOpen(true)
-            }}
-            title="Editar tradução"
-          >
-            <Pencil className="size-4" />
-          </Button>
+            {hasContext && (
+              <div className="group/context rounded-xl bg-muted/30 p-3">
+                <Collapsible open={contextExpanded} onOpenChange={setContextExpanded}>
+                    <div className="flex items-center justify-between gap-2">
+                      <span className="text-[10px] font-bold text-muted-foreground uppercase tracking-widest">
+                        Contexto
+                      </span>
+                      <CollapsibleTrigger asChild>
+                        <button
+                          type="button"
+                          className="inline-flex items-center gap-1 text-[10px] font-semibold text-primary opacity-0 transition-opacity group-hover/context:opacity-100 focus-visible:opacity-100"
+                          onClick={(e) => e.stopPropagation()}
+                        >
+                          {contextExpanded ? "Recolher" : "Expandir"}
+                          {contextExpanded ? <ChevronUp className="size-3" /> : <ChevronDown className="size-3" />}
+                        </button>
+                      </CollapsibleTrigger>
+                    </div>
+
+                    <CollapsibleContent className="mt-2">
+                      <ContextBlocks blocks={usageBlocks} />
+                    </CollapsibleContent>
+                </Collapsible>
+              </div>
+            )}
+          </div>
 
           <Rotate3D className="minimal-rotate-hint size-4 text-muted-foreground" />
         </div>
