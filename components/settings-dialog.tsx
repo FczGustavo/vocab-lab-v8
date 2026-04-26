@@ -65,6 +65,7 @@ export function SettingsDialog() {
   const { model, setModel } = useGptModel()
   const [palette, setPalette] = useState<ColorPalette>("blue")
   const [syncBusy, setSyncBusy] = useState<"push" | "pull" | null>(null)
+  const [activeTab, setActiveTab] = useState<"general" | "content">("general")
 
   const syncCountText = useMemo(() => {
     const cards = allFlashcards.length
@@ -214,7 +215,22 @@ export function SettingsDialog() {
           <div className="sm:w-44 border-b sm:border-b-0 sm:border-r p-2 bg-muted/30">
             <Button
               variant="ghost"
-              className="w-full justify-start gap-2 bg-background shadow-sm"
+              className={cn(
+                "mb-1 w-full justify-start gap-2",
+                activeTab === "general" && "bg-background shadow-sm"
+              )}
+              onClick={() => setActiveTab("general")}
+            >
+              <RefreshCcw className="size-4 text-primary" />
+              Geral
+            </Button>
+            <Button
+              variant="ghost"
+              className={cn(
+                "w-full justify-start gap-2",
+                activeTab === "content" && "bg-background shadow-sm"
+              )}
+              onClick={() => setActiveTab("content")}
             >
               <Sparkles className="size-4 text-primary" />
               Conteúdo
@@ -224,7 +240,7 @@ export function SettingsDialog() {
           <div className="flex-1 p-5 max-h-[70vh] overflow-y-auto">
             <div className="space-y-6">
               <div className="space-y-6">
-                <div className="space-y-3">
+                <div className={cn("space-y-3", activeTab !== "general" && "hidden")}>
                   <h4 className="text-sm font-medium flex items-center gap-2">
                     <Sun className="size-4 text-primary" />
                     Tema do Aplicativo
@@ -260,7 +276,7 @@ export function SettingsDialog() {
                   </div>
                 </div>
 
-                <div className="space-y-3 pt-4 border-t">
+                <div className={cn("space-y-3 pt-4 border-t", activeTab !== "general" && "hidden")}>
                   <h4 className="text-sm font-medium flex items-center gap-2">
                     <Sparkles className="size-4 text-primary" />
                     Tema de Cores
@@ -301,7 +317,7 @@ export function SettingsDialog() {
                   </div>
                 </div>
 
-                <div className="space-y-3 pt-4 border-t">
+                <div className={cn("space-y-3 pt-4 border-t", activeTab !== "general" && "hidden")}>
                   <div className="flex items-center justify-between">
                     <div className="space-y-0.5">
                       <h4 className="text-sm font-medium flex items-center gap-2">
@@ -319,7 +335,7 @@ export function SettingsDialog() {
                   </div>
                 </div>
 
-                <div className="space-y-4 pt-4 border-t">
+                <div className={cn("space-y-4 pt-4 border-t", activeTab !== "content" && "hidden")}>
                   <h4 className="text-sm font-medium flex items-center gap-2">
                     <Sparkles className="size-4 text-primary" />
                     Conteúdo dos Cards
@@ -433,7 +449,7 @@ export function SettingsDialog() {
                     <Switch checked={efommMode} onCheckedChange={setEfommMode} />
                   </div>                </div>
 
-                <div className="space-y-3 pt-4 border-t">
+                <div className={cn("space-y-3 pt-4 border-t", activeTab !== "general" && "hidden")}>
                   <h4 className="text-sm font-medium flex items-center gap-2">
                     <RefreshCcw className="size-4 text-primary" />
                     Sincronização (Sync Code)
@@ -506,7 +522,7 @@ export function SettingsDialog() {
                   </p>
                 </div>
 
-                <div className="pt-4 border-t">
+                <div className={cn("pt-4 border-t", activeTab !== "general" && "hidden")}>
                   <h4 className="text-sm font-medium mb-3 flex items-center gap-2">
                     <BarChart3 className="size-4 text-primary" />
                     Estatísticas de Estudo

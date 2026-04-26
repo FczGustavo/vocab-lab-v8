@@ -382,6 +382,10 @@ function normalizePtBrOrthographyMultiline(value: unknown): string {
   // If the model returns block labels in a single line, force line breaks before each label.
   const labelPatterns = [
     "Uso principal",
+    "Principais usos",
+    "Preferencia",
+    "Preferência",
+    "Contraste",
     "Nuance",
     "Estrutura comum",
     "Estrutura",
@@ -464,13 +468,13 @@ function normalizeUsageNoteByPartOfSpeech(value: unknown, partOfSpeech: string):
   const primaryLabel = getUsagePrimaryLabel(partOfSpeech)
 
   // If model already returned labeled blocks, keep them but normalize line breaks and whitespace.
-  if (/:/.test(cleaned) && /(como|uso|nuance|estrutura|intensificador|atenuador|prefer[eê]ncia)/i.test(cleaned)) {
+  if (/:/.test(cleaned) && /(como|uso|nuance|estrutura|intensificador|atenuador|prefer[eê]ncia|contraste)/i.test(cleaned)) {
     const rawBlocks = cleaned
       .replace(/\s+([A-Za-zÀ-ÿ][^:\n]{2,40}:)/g, "\n$1")
       .split("\n")
       .map((line) => normalizeInlineWhitespace(line))
       .filter(Boolean)
-      .slice(0, 4)
+      .slice(0, 5)
 
     const blocks: string[] = rawBlocks.map((line) => {
       const labelMatch = line.match(/^([^:]{2,40}):\s*(.+)$/)
@@ -1336,7 +1340,9 @@ Be ULTRA CONCISE and DIRECT (flashcard style, 2–3 short sentences maximum).
 - PROHIBITED: Markdown syntax (**, *, #), bullet points, or embedded line breaks (\\n). The text must be continuous and plain.
 - ZERO-FLUFF RULE (CRITICAL): DO NOT state the obvious. If the word is a basic object, animal, color, common action, or everyday 1:1 translation (e.g., "apple", "car", "blue", "run", "bought", "house", "dog"), YOU MUST RETURN "usageNote": "".
 - ONLY write a usage note IF AND ONLY IF there is a high risk of confusion for Brazilian learners: false cognates (e.g., "actually"), tricky modals ("rather"), preposition mismatches ("depend on"), strict maritime technical jargon, or HOMOGRAPH TRAPS (see below).
+- When a usage note is needed, prefer a block-like sequence with short inline titles (e.g., "Preferência:", "Nuance:", "Contraste:", "Estrutura:") so each idea is clearly separated.
 - HOMOGRAPH TRAP RULE: If the word is a verb that shares its spelling with another verb of completely different etymology and conjugation pattern (e.g., "lie" = mentir [regular: lied/lied] vs "lie" = deitar [irregular: lay/lain]), you MUST include a usage note warning: state the meaning being translated, its conjugation pattern (regular/irregular), and briefly contrast with the other homograph's meaning and conjugation. Example: "Este 'lie' significa mentir e é regular (lied/lied). Não confundir com 'lie' = deitar, que é irregular (lay/lain)."
+- VERSATILE ADVERB RULE: For highly versatile adverbs (especially "rather"), prefer this compact structure in PT-BR: "Advérbio versátil. Principais usos: Preferência: ... Intensificador: ... Contraste: ...". Keep it plain text and concise.
 - If generating a note, write naturally. You MAY use short inline labels like "Nuance:" to introduce a secondary use, but DO NOT repeat the word "Nuance:" multiple times in the same text.
 - If the word is an ACRONYM, MANDATORY: spell out what each letter stands for (in English), then explain the meaning in Portuguese.`
     : `STEP 3 — USAGE NOTE: Do NOT generate a usage note. Always return "usageNote": "".`
@@ -1579,6 +1585,8 @@ Be ULTRA CONCISE and DIRECT (2–3 short sentences maximum).
 - PROHIBITED: Markdown syntax (**, *, #), line breaks, or bullet points. Continuous plain text only.
 - ZERO-FLUFF RULE (CRITICAL): DO NOT state the obvious. If the word is a basic object, animal, color, common action, or everyday 1:1 translation, YOU MUST RETURN "usageNote": "".
 - ONLY write a usage note IF AND ONLY IF there is a high risk of confusion for Brazilian learners (false cognates, modals, etc).
+- When a usage note is needed, prefer short labeled chunks (e.g., "Preferência:", "Nuance:", "Contraste:", "Estrutura:") so ideas are visually separated.
+- For highly versatile adverbs (especially "rather"), prefer this compact format: "Advérbio versátil. Principais usos: Preferência: ... Intensificador: ... Contraste: ...".
 - Write naturally. You MAY use short inline labels like "Nuance:" to introduce a secondary use, but DO NOT repeat the word "Nuance:" multiple times.`
     : `USAGE NOTE: Do NOT generate a usage note. Always return "usageNote": "".`
 

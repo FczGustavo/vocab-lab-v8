@@ -105,53 +105,94 @@ function ClassifiedWordList({
 }
 
 function parseUsageNoteBlocks(note: string): Array<{ label: string | null; text: string }> {
-  const knownLabels = [
-    "Nuance",
-    "Outro uso",
-    "Estrutura comum",
-    "Estrutura",
-    "Uso principal",
-    "Intensificador",
-    "Atenuador",
-    "Preferência / Alternativa",
-    "Preferencia / Alternativa",
-    "Como Adjetivo",
-    "Como Advérbio",
-    "Como Adverbio",
-    "Como Substantivo",
-    "Como Verbo",
-  ]
+  const normalizeContextText = (value: string) =>
+    value
+      .replace(/\s+([,.;!?])/g, "$1")
+      .replace(/\(\s+/g, "(")
+      .replace(/\s+\)/g, ")")
+      .replace(/\s*\/\s*/g, " / ")
+      .replace(/\s{2,}/g, " ")
+      .trim()
 
-  const labelRegex = new RegExp(`\\s+(${knownLabels.map((label) => label.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")).join("|")}):`, "gi")
+  const canonicalizeLabel = (label: string, parenthetical?: string): string => {
+    const lower = normalizeContextText(label).toLowerCase()
+    const detail = normalizeContextText(parenthetical || "").toLowerCase()
 
-  const normalized = note
-    .replace(/\r\n/g, "\n")
-    .replace(labelRegex, "\n$1:")
-    .trim()
+    if (lower.startsWith("principal uso") && /prefer/.test(detail)) return "Preferência"
+    if (lower === "preferencia" || lower === "preferência") return "Preferência"
+    if (lower.includes("preferência / alternativa") || lower.includes("preferencia / alternativa")) {
+      return "Preferência / Alternativa"
+    }
+    if (lower === "principais usos" || lower === "principal uso" || lower === "uso principal") {
+      return "Principais usos"
+    }
+    if (lower === "como adverbio") return "Como Advérbio"
 
+    return label
+      .split(" ")
+      .map((chunk) => chunk.charAt(0).toUpperCase() + chunk.slice(1))
+      .join(" ")
+  }
+
+  const labelPattern =
+    /(Principais usos?|Principal uso|Uso principal|Prefer[eê]ncia(?:\s*\/\s*Alternativa)?|Nuance|Outro uso|Estrutura comum|Estrutura|Intensificador|Atenuador|Contraste|Como\s+[A-Za-zÀ-ÿ]+)/gi
+
+  const normalized = normalizeContextText(note.replace(/\r\n/g, "\n").replace(/\n+/g, " "))
   if (!normalized) return []
 
-  return normalized
-    .split("\n")
-    .map((line) => line.trim())
-    .filter(Boolean)
-    .map((line) => {
-      const match = line.match(/^([^:]{2,40}:)\s*(.*)$/)
-      if (!match) return { label: null, text: line }
-      return {
-        label: match[1],
-        text: match[2] || "",
-      }
+  const entries: Array<{ label: string | null; text: string }> = []
+  const matches = [...normalized.matchAll(labelPattern)]
+
+  if (matches.length === 0) {
+    return [{ label: null, text: normalized }]
+  }
+
+  const firstMatch = matches[0]
+  if (firstMatch && firstMatch.index && firstMatch.index > 0) {
+    const prefix = normalizeContextText(normalized.slice(0, firstMatch.index))
+    if (prefix) entries.push({ label: null, text: prefix })
+  }
+
+  matches.forEach((match, idx) => {
+    const labelStart = match.index ?? 0
+    const labelText = match[0]
+    const afterLabel = normalized.slice(labelStart + labelText.length)
+    const detailMatch = afterLabel.match(/^\s*\(([^)]+)\)/)
+    const detail = detailMatch?.[1] || ""
+
+    const contentStart =
+      labelStart +
+      labelText.length +
+      (detailMatch ? detailMatch[0].length : 0) +
+      (afterLabel.slice(detailMatch ? detailMatch[0].length : 0).match(/^\s*[:\-]/)?.[0].length || 0)
+
+    const nextStart = idx < matches.length - 1 ? (matches[idx + 1].index ?? normalized.length) : normalized.length
+    const content = normalizeContextText(normalized.slice(contentStart, nextStart))
+
+    if (!content) return
+
+    entries.push({
+      label: canonicalizeLabel(normalizeContextText(labelText), detail),
+      text: content,
     })
-    .reduce<Array<{ label: string | null; text: string }>>((acc, current) => {
-      const prev = acc[acc.length - 1]
-      if (prev && prev.label && !prev.text && !current.label) {
-        prev.text = current.text
-        return acc
-      }
-      acc.push(current)
-      return acc
-    }, [])
+  })
+
+  return entries
+}
+
+function ContextBlocks({ blocks }: { blocks: Array<{ label: string | null; text: string }> }) {
+  return (
+    <div className="space-y-1.5">
+      {blocks.map((block, idx) => (
+        <div key={idx} className="text-xs leading-relaxed text-foreground">
+          <p>
+            {block.label ? <span className="mr-1 font-semibold text-primary">{block.label}:</span> : null}
+            <span>{block.text}</span>
+          </p>
+        </div>
+      ))}
+    </div>
+  )
 }
 
 export function FlashcardCard({ flashcard, onDelete, onCreateFromAlternative, onUpdateFlashcard, layout = "grid" }: FlashcardCardProps) {
@@ -405,17 +446,8 @@ export function FlashcardCard({ flashcard, onDelete, onCreateFromAlternative, on
                       </CollapsibleTrigger>
                     </div>
 
-                    <CollapsibleContent className="mt-2 space-y-2">
-                      <div className="space-y-1.5">
-                        {usageBlocks.map((block, idx) => (
-                          <div key={idx} className="text-xs leading-relaxed text-foreground">
-                            <p>
-                              {block.label ? <span className="mr-1 font-semibold text-primary">{block.label}</span> : null}
-                              <span>{block.text}</span>
-                            </p>
-                          </div>
-                        ))}
-                      </div>
+                    <CollapsibleContent className="mt-2">
+                      <ContextBlocks blocks={usageBlocks} />
                     </CollapsibleContent>
                   </Collapsible>
                 </div>
@@ -657,17 +689,8 @@ export function FlashcardCard({ flashcard, onDelete, onCreateFromAlternative, on
                       </CollapsibleTrigger>
                     </div>
 
-                    <CollapsibleContent className="mt-2 space-y-2">
-                      <div className="space-y-1.5">
-                        {usageBlocks.map((block, idx) => (
-                          <div key={idx} className="text-xs leading-relaxed text-foreground">
-                            <p>
-                              {block.label ? <span className="mr-1 font-semibold text-primary">{block.label}</span> : null}
-                              <span>{block.text}</span>
-                            </p>
-                          </div>
-                        ))}
-                      </div>
+                    <CollapsibleContent className="mt-2">
+                      <ContextBlocks blocks={usageBlocks} />
                     </CollapsibleContent>
                 </Collapsible>
               </div>
