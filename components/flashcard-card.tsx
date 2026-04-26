@@ -7,10 +7,8 @@ import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
 import { Card } from "@/components/ui/card"
 import type { Flashcard, ClassifiedWord, PartOfSpeech, AlternativeForm } from "@/lib/types"
-import type { FlashcardRevisionResponse } from "@/lib/openai"
 import { useAnimations } from "@/hooks/use-animations"
 import { useAiPreferences } from "@/hooks/use-ai-preferences"
-import { useGptModel } from "@/hooks/use-gpt-model"
 import { toast } from "@/hooks/use-toast"
 import {
   Dialog,
@@ -197,8 +195,7 @@ export function FlashcardCard({ flashcard, onDelete, onCreateFromAlternative, on
   const [editBusy, setEditBusy] = useState(false)
   const [contextExpanded, setContextExpanded] = useState(false)
   const { enabled: animationsEnabled } = useAnimations()
-  const { synonymsLevel, includeConjugations, includeAlternativeForms, includeUsageNote, contextDetailMode, efommMode } = useAiPreferences()
-  const { model } = useGptModel()
+  const { synonymsLevel, includeConjugations, includeAlternativeForms, includeUsageNote } = useAiPreferences()
 
   const speak = (text: string) => {
     const utterance = new SpeechSynthesisUtterance(text)
@@ -236,44 +233,14 @@ export function FlashcardCard({ flashcard, onDelete, onCreateFromAlternative, on
 
     setEditBusy(true)
     const t = toast({
-      title: "Reanalisando card…",
+      title: "Salvando tradução…",
       description: `${flashcard.word} → ${nextTranslation}`,
     })
 
     try {
-      const res = await fetch("/api/ai/revise", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          model,
-          input: {
-            word: flashcard.word,
-            partOfSpeech: flashcard.partOfSpeech,
-            translation: nextTranslation,
-            efommMode,
-            synonymsLevel,
-            includeAlternativeForms,
-            includeUsageNote,
-            contextMode: contextDetailMode,
-          },
-        }),
-      })
-      if (!res.ok) {
-        const json = await res.json().catch(() => ({}))
-        throw new Error(json?.error || "Erro ao revisar card")
-      }
-      const revised: FlashcardRevisionResponse = await res.json()
-
       const updated: Flashcard = {
         ...flashcard,
-        translation: revised.translation,
-        usageNote: revised.usageNote || "",
-        synonyms: revised.synonyms as any,
-        antonyms: revised.antonyms as any,
-        example: revised.example,
-        exampleTranslation: (revised as any).exampleTranslation || "",
-        alternativeForms: revised.alternativeForms as any,
-        falseCognate: revised.falseCognate,
+        translation: nextTranslation,
       }
 
       const ok = await onUpdateFlashcard(updated)
@@ -282,7 +249,7 @@ export function FlashcardCard({ flashcard, onDelete, onCreateFromAlternative, on
       t.update({
         id: t.id,
         title: "Card atualizado",
-        description: "Tradução e conteúdo foram recalculados.",
+        description: "Tradução atualizada com sucesso.",
       })
       setEditOpen(false)
     } catch (err) {

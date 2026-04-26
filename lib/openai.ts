@@ -142,11 +142,31 @@ function isLikelyPtBrAdverbialChunk(value: string): boolean {
 
   const exactAdverbials = new Set([
     "bem",
+    "mal",
     "bastante",
     "muito",
     "muito bem",
+    "muito mal",
     "totalmente",
     "completamente",
+    "quase",
+    "quase nao",
+    "quase não",
+    "raramente",
+    "dificilmente",
+    "frequentemente",
+    "geralmente",
+    "normalmente",
+    "apenas",
+    "somente",
+    "so",
+    "só",
+    "jamais",
+    "nunca",
+    "sempre",
+    "ainda",
+    "ja",
+    "já",
     "relativamente",
     "um tanto",
     "moderadamente",
@@ -155,6 +175,10 @@ function isLikelyPtBrAdverbialChunk(value: string): boolean {
   ])
 
   if (exactAdverbials.has(chunk)) return true
+
+  if (/^(de forma alguma|de modo algum|de jeito nenhum|ao menos|pelo menos|mais ou menos)$/.test(chunk)) {
+    return true
+  }
 
   return /(mente)$/.test(chunk)
 }
@@ -324,6 +348,19 @@ function scoreTranslationChunkByPartOfSpeech(chunk: string, partOfSpeech: string
 
   if (partOfSpeech === "verb") {
     if (/\b\w+(ar|er|ir)\b/.test(normalized) && !/\s/.test(normalized)) score += 3
+  }
+
+  if (partOfSpeech === "noun") {
+    if (/^(o|a|os|as|um|uma|uns|umas)\s+/.test(normalized)) score += 4
+    if (isLikelyPtBrAdverbialChunk(normalized)) score -= 3
+    if (/\b\w+(ar|er|ir)\b/.test(normalized) && !/\s/.test(normalized)) score -= 2
+  }
+
+  if (partOfSpeech === "adjective") {
+    if (/^(o|a|os|as|um|uma|uns|umas)\s+/.test(normalized)) score -= 3
+    if (isLikelyPtBrAdverbialChunk(normalized)) score -= 3
+    if (/\b\w+(ar|er|ir)\b/.test(normalized) && !/\s/.test(normalized)) score -= 2
+    if (!/\s/.test(normalized) && !normalized.endsWith("mente")) score += 2
   }
 
   if (partOfSpeech === "preposition") {
@@ -969,6 +1006,34 @@ function normalizeTranslationByLexicalGuards(word: string, translation: string):
     return "bombordo / lado esquerdo"
   }
 
+  // Deterministic fix for a frequent learner-facing mistranslation.
+  // Prefer stable PT-BR equivalents and avoid "quase não" as primary gloss.
+  if (normalizedWord === "hardly") {
+    const chunks = normalizedTranslation
+      .split("/")
+      .map((item) => normalizeInlineWhitespace(item).toLowerCase())
+      .filter(Boolean)
+
+    const hasMultiple = normalizedTranslation.includes("/")
+    const has = (candidate: string) => chunks.includes(candidate)
+
+    const preferred: string[] = []
+    if (has("raramente")) preferred.push("raramente")
+    if (has("quase nunca")) preferred.push("quase nunca")
+    if (has("pouquissimas vezes") || has("pouquíssimas vezes")) preferred.push("pouquíssimas vezes")
+    if (has("dificilmente")) preferred.push("dificilmente")
+
+    if (preferred.length > 0) {
+      return hasMultiple ? preferred.slice(0, 2).join(" / ") : preferred[0]
+    }
+
+    if (has("quase nao") || has("quase não")) {
+      return hasMultiple ? "raramente / quase nunca" : "raramente"
+    }
+
+    return hasMultiple ? "raramente / quase nunca" : "raramente"
+  }
+
   return normalizedTranslation
 }
 
@@ -1386,6 +1451,7 @@ Provide up to 2 EXACT and most common translations in Portuguese, separated by a
 - PHRASE/ACRONYM OVERRIDE: if partOfSpeech is "phrase" or "acronym", always provide EXACTLY 1 translation (NO slash separators).
 - IDIOMATIC PHRASE RULE: If partOfSpeech is "phrase", translate the intended meaning in natural Brazilian Portuguese. Do NOT produce literal calques, broken commands, or word-by-word fragments. Example: "mind your own business" -> "cuide da sua vida", not "cada um no seu".
 - DO NOT over-simplify adverbs or nuanced expressions (e.g., do NOT translate "rather" as just "mais"; use full nuance forms like "em vez de / bastante" or "um tanto").
+- ADVERB PRECISION: keep the translation as adverbial function (not noun/verb/adjective). For "hardly", prefer "raramente" / "quase nunca" ("pouquíssimas vezes" is also acceptable).
 - CONTEXT-FIRST RULE: prioritize the FUNCTION in the sentence, not a dictionary fragment. For modal patterns ("would rather", "had better", "used to"), translate the full function naturally in Portuguese.
 - Specific guardrail for "rather":
   * "I'd rather stay home than go out tonight." → translation sense should map to "preferir" / "em vez de", never to "antes que".
@@ -1398,6 +1464,7 @@ Provide EXACTLY 1 main translation in Portuguese (NO slash separators).
 - GOLDEN RULE: The chosen translation MUST make complete, natural sense when mentally substituted into the example sentence you generate in STEP 5.
 - IDIOMATIC PHRASE RULE: If partOfSpeech is "phrase", translate the intended meaning in natural Brazilian Portuguese. Do NOT produce literal calques, broken commands, or word-by-word fragments. Example: "mind your own business" -> "cuide da sua vida".
 - DO NOT over-simplify adverbs or nuanced expressions (e.g., do NOT translate "rather" as just "mais").
+- ADVERB PRECISION: keep the translation as adverbial function (not noun/verb/adjective). For "hardly", prefer "raramente" or "quase nunca".
 - CONTEXT-FIRST RULE: prioritize the FUNCTION in the sentence, not a dictionary fragment. For modal patterns ("would rather", "had better", "used to"), translate the full function naturally in Portuguese.
 - Specific guardrail for "rather": when the sentence expresses preference ("would rather"), the translation must map to "preferir" / "em vez de", not "antes que".
 - For nouns and phrases, ALWAYS include the definite article (e.g., "a proa", "o porto").
