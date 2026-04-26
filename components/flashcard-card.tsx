@@ -302,7 +302,7 @@ export function FlashcardCard({ flashcard, onDelete, onCreateFromAlternative, on
     return (
       <>
         <Card
-          className="surface-card surface-card-elevated interactive-lift flex cursor-pointer flex-col justify-between gap-4 p-4"
+          className="surface-card surface-card-elevated interactive-lift relative flex cursor-pointer flex-col justify-between gap-4 p-4"
           onClick={() => setIsFlipped((value) => !value)}
         >
           <div className="flex items-start justify-between gap-4">
@@ -375,22 +375,10 @@ export function FlashcardCard({ flashcard, onDelete, onCreateFromAlternative, on
               animationsEnabled ? "duration-300" : "duration-0"
             )}>
               <div className="space-y-3">
-                <div className="flex items-start justify-between gap-2">
-                  <p className="min-w-0 flex-1 text-lg font-medium leading-snug text-foreground">
+                <div className="space-y-1.5 pb-10">
+                  <p className="min-w-0 text-lg font-medium leading-snug text-foreground">
                     {flashcard.translation}
                   </p>
-                  <Button
-                    variant="ghost"
-                    size="icon"
-                    className="size-8 shrink-0"
-                    onClick={(e) => {
-                      e.stopPropagation()
-                      setEditOpen(true)
-                    }}
-                    title="Editar tradução"
-                  >
-                    <Pencil className="size-4" />
-                  </Button>
                 </div>
                 <ClassifiedWordList words={flashcard.synonyms} label="Sinônimos" maxCount={synonymsLevel} />
                 <ClassifiedWordList words={flashcard.antonyms} label="Antônimos" maxCount={synonymsLevel} />
@@ -421,7 +409,7 @@ export function FlashcardCard({ flashcard, onDelete, onCreateFromAlternative, on
                 )}
               </div>
               {hasContext && (
-                <div className="rounded-lg bg-muted/30 p-3">
+                <div className="group/context rounded-lg bg-muted/30 p-3">
                   <Collapsible open={contextExpanded} onOpenChange={setContextExpanded}>
                     <div className="flex items-center justify-between gap-2">
                       <span className="text-[10px] font-bold text-muted-foreground uppercase tracking-widest">
@@ -430,7 +418,7 @@ export function FlashcardCard({ flashcard, onDelete, onCreateFromAlternative, on
                       <CollapsibleTrigger asChild>
                         <button
                           type="button"
-                          className="inline-flex items-center gap-1 text-[10px] font-semibold text-primary"
+                          className="inline-flex items-center gap-1 text-[10px] font-semibold text-primary opacity-0 transition-opacity group-hover/context:opacity-100 focus-visible:opacity-100"
                           onClick={(e) => e.stopPropagation()}
                         >
                           {contextExpanded ? "Recolher" : "Expandir"}
@@ -474,6 +462,21 @@ export function FlashcardCard({ flashcard, onDelete, onCreateFromAlternative, on
                 </div>
               )}
             </div>
+          )}
+
+          {isFlipped && (
+            <Button
+              variant="ghost"
+              size="icon"
+              className="absolute bottom-4 left-4 z-10 size-8 shrink-0"
+              onClick={(e) => {
+                e.stopPropagation()
+                setEditOpen(true)
+              }}
+              title="Editar tradução"
+            >
+              <Pencil className="size-4" />
+            </Button>
           )}
         </Card>
 
@@ -645,26 +648,14 @@ export function FlashcardCard({ flashcard, onDelete, onCreateFromAlternative, on
             </div>
           </div>
 
-          <div className="space-y-2.5 flex-1 overflow-y-auto pr-1">
-            <div className="flex items-start justify-between gap-2">
+          <div className="space-y-2.5 flex-1 overflow-y-auto pr-1 pb-12 [scrollbar-gutter:stable]">
+            <div className="space-y-1.5">
               <p className="text-xl font-medium text-foreground leading-snug">
                 {flashcard.translation}
               </p>
-              <Button
-                variant="ghost"
-                size="icon"
-                className="size-8 shrink-0"
-                onClick={(e) => {
-                  e.stopPropagation()
-                  setEditOpen(true)
-                }}
-                title="Editar tradução"
-              >
-                <Pencil className="size-4" />
-              </Button>
             </div>
             {hasContext && (
-              <div className="rounded-xl bg-muted/30 p-3">
+              <div className="group/context rounded-xl bg-muted/30 p-3">
                 <Collapsible open={contextExpanded} onOpenChange={setContextExpanded}>
                     <div className="flex items-center justify-between gap-2">
                       <span className="text-[10px] font-bold text-muted-foreground uppercase tracking-widest">
@@ -673,7 +664,7 @@ export function FlashcardCard({ flashcard, onDelete, onCreateFromAlternative, on
                       <CollapsibleTrigger asChild>
                         <button
                           type="button"
-                          className="inline-flex items-center gap-1 text-[10px] font-semibold text-primary"
+                          className="inline-flex items-center gap-1 text-[10px] font-semibold text-primary opacity-0 transition-opacity group-hover/context:opacity-100 focus-visible:opacity-100"
                           onClick={(e) => e.stopPropagation()}
                         >
                           {contextExpanded ? "Recolher" : "Expandir"}
@@ -808,6 +799,19 @@ export function FlashcardCard({ flashcard, onDelete, onCreateFromAlternative, on
               </div>
             )}
           </div>
+
+          <Button
+            variant="ghost"
+            size="icon"
+            className="absolute bottom-4 left-4 z-10 size-8 shrink-0"
+            onClick={(e) => {
+              e.stopPropagation()
+              setEditOpen(true)
+            }}
+            title="Editar tradução"
+          >
+            <Pencil className="size-4" />
+          </Button>
 
           <Rotate3D className="minimal-rotate-hint size-4 text-muted-foreground" />
         </div>

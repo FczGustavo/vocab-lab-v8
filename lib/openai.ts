@@ -84,11 +84,20 @@ function inferPartOfSpeechWithAcronymFallback(params: {
 }): { partOfSpeech: string; normalizedWord: string } {
   const rawPos = normalizePartOfSpeech(params.rawPartOfSpeech)
   const candidate = normalizeInlineWhitespace(params.originalWord)
+  const normalizedWord = normalizeInlineWhitespace(params.normalizedWord || candidate)
+
+  // Multi-word entries are expressions by definition in this app.
+  if (candidate.includes(" ")) {
+    return {
+      partOfSpeech: "phrase",
+      normalizedWord,
+    }
+  }
 
   if (rawPos === "acronym") {
     return {
       partOfSpeech: "acronym",
-      normalizedWord: normalizeInlineWhitespace(params.normalizedWord || candidate).toUpperCase(),
+      normalizedWord: normalizedWord.toUpperCase(),
     }
   }
 
@@ -99,7 +108,7 @@ function inferPartOfSpeechWithAcronymFallback(params: {
   if (!isAcronymCandidate(candidate) || !hasAcronymSignal) {
     return {
       partOfSpeech: rawPos,
-      normalizedWord: normalizeInlineWhitespace(params.normalizedWord || candidate),
+      normalizedWord,
     }
   }
 
@@ -285,8 +294,8 @@ function normalizeTranslationByPartOfSpeech(
     return scoreB - scoreA
   })
 
-  // Never force 2 translations: include up to two only when there are two coherent options.
-  if (partOfSpeech === "acronym") return ranked[0]
+  // Expressions and acronyms should surface only the single best translation.
+  if (partOfSpeech === "acronym" || partOfSpeech === "phrase") return ranked[0]
   if (!includeMultipleTranslations) return ranked[0]
   return ranked.slice(0, 2).join(" / ")
 }
@@ -896,6 +905,20 @@ function shouldSuppressUsageAndExample(params: {
 }): boolean {
   if (params.contextMode === "always") return false
 
+  if (params.partOfSpeech === "phrase") {
+    return false
+  }
+
+  if (params.partOfSpeech === "acronym") {
+    const note = normalizeInlineWhitespace(params.usageNote)
+    const hasTechnicalSpecificity =
+      /(mar[ií]t|naval|portu[aá]ri|log[ií]stic|contamin|tratamento|convencional|ineficiente|sigla|acr[oô]nimo|stands for|technical|t[eé]cnic)/i.test(
+        note
+      )
+
+    return !hasTechnicalSpecificity
+  }
+
   const pos = params.partOfSpeech
   const supportedParts = new Set([
     "verb",
@@ -1092,12 +1115,13 @@ function normalizeRevisionResponse(
   }
 ): FlashcardRevisionResponse {
   const normalizedTranslation = normalizeTranslationByLexicalGuards(options.word, normalizeTranslationText(raw?.translation))
+  const normalizedPartOfSpeech = normalizePartOfSpeech(options.partOfSpeech)
   const translation = normalizePtBrOrthography(
-    normalizePartOfSpeech(options.partOfSpeech) === "acronym"
+    normalizedPartOfSpeech === "acronym" || normalizedPartOfSpeech === "phrase"
       ? pickPrimaryTranslation(normalizedTranslation)
       : normalizedTranslation
   )
-  const usageNote = normalizeUsageNoteByPartOfSpeech(raw?.usageNote, normalizePartOfSpeech(options.partOfSpeech))
+  const usageNote = normalizeUsageNoteByPartOfSpeech(raw?.usageNote, normalizedPartOfSpeech)
   const synonyms = normalizeLexicalRelations(raw?.synonyms, options.synonymsLevel)
   const antonyms = normalizeLexicalRelations(raw?.antonyms, options.synonymsLevel)
   const example = normalizeInlineWhitespace(raw?.example)
@@ -1105,14 +1129,14 @@ function normalizeRevisionResponse(
   const alternativeForms = normalizeAlternativeForms(
     raw?.alternativeForms,
     normalizeInlineWhitespace(options.word),
-    normalizePartOfSpeech(options.partOfSpeech),
+    normalizedPartOfSpeech,
     options.includeAlternativeForms,
     options.isCompoundOrAcronym
   )
 
   const suppressUsageAndExample = shouldSuppressUsageAndExample({
     word: options.word,
-    partOfSpeech: normalizePartOfSpeech(options.partOfSpeech),
+    partOfSpeech: normalizedPartOfSpeech,
     translation,
     usageNote,
     synonymsCount: synonyms.length,
@@ -1273,6 +1297,7 @@ interface InternalReviewItem {
     | "usage_note_format"
     | "ptbr_orthography"
     | "anti_hallucination"
+    | "phrase_naturalness"
   status: "pass" | "fail"
   fixApplied: string
 }
@@ -1340,6 +1365,8 @@ Be ULTRA CONCISE and DIRECT (flashcard style, 2–3 short sentences maximum).
 - PROHIBITED: Markdown syntax (**, *, #), bullet points, or embedded line breaks (\\n). The text must be continuous and plain.
 - ZERO-FLUFF RULE (CRITICAL): DO NOT state the obvious. If the word is a basic object, animal, color, common action, or everyday 1:1 translation (e.g., "apple", "car", "blue", "run", "bought", "house", "dog"), YOU MUST RETURN "usageNote": "".
 - ONLY write a usage note IF AND ONLY IF there is a high risk of confusion for Brazilian learners: false cognates (e.g., "actually"), tricky modals ("rather"), preposition mismatches ("depend on"), strict maritime technical jargon, or HOMOGRAPH TRAPS (see below).
+- PHRASE RULE: If partOfSpeech is "phrase", prefer keeping a short usage note that explains the idiomatic meaning, tone, register, regional force, or why a literal translation would mislead the learner.
+- TECHNICAL TERM RULE: If the entry is a technical expression or acronym/sigla (e.g., CWQ), you MUST include a short defining usage note whenever the technical specificity is needed to understand the term. Example: "CWQ significa Challenging Water Quality: águas com altos níveis de contaminantes que tornam o tratamento convencional difícil ou ineficiente."
 - When a usage note is needed, prefer a block-like sequence with short inline titles (e.g., "Preferência:", "Nuance:", "Contraste:", "Estrutura:") so each idea is clearly separated.
 - HOMOGRAPH TRAP RULE: If the word is a verb that shares its spelling with another verb of completely different etymology and conjugation pattern (e.g., "lie" = mentir [regular: lied/lied] vs "lie" = deitar [irregular: lay/lain]), you MUST include a usage note warning: state the meaning being translated, its conjugation pattern (regular/irregular), and briefly contrast with the other homograph's meaning and conjugation. Example: "Este 'lie' significa mentir e é regular (lied/lied). Não confundir com 'lie' = deitar, que é irregular (lay/lain)."
 - VERSATILE ADVERB RULE: For highly versatile adverbs (especially "rather"), prefer this compact structure in PT-BR: "Advérbio versátil. Principais usos: Preferência: ... Intensificador: ... Contraste: ...". Keep it plain text and concise.
@@ -1356,7 +1383,8 @@ Be ULTRA CONCISE and DIRECT (flashcard style, 2–3 short sentences maximum).
     ? `STEP 2 — TRANSLATION (Brazilian Portuguese, 2009 Orthographic Agreement)
 Provide up to 2 EXACT and most common translations in Portuguese, separated by a slash (/).
 - GOLDEN RULE: The chosen translation(s) MUST make complete, natural sense when mentally substituted into the example sentence you generate in STEP 5.
-- ACRONYM OVERRIDE: if partOfSpeech is "acronym", always provide EXACTLY 1 translation (NO slash separators).
+- PHRASE/ACRONYM OVERRIDE: if partOfSpeech is "phrase" or "acronym", always provide EXACTLY 1 translation (NO slash separators).
+- IDIOMATIC PHRASE RULE: If partOfSpeech is "phrase", translate the intended meaning in natural Brazilian Portuguese. Do NOT produce literal calques, broken commands, or word-by-word fragments. Example: "mind your own business" -> "cuide da sua vida", not "cada um no seu".
 - DO NOT over-simplify adverbs or nuanced expressions (e.g., do NOT translate "rather" as just "mais"; use full nuance forms like "em vez de / bastante" or "um tanto").
 - CONTEXT-FIRST RULE: prioritize the FUNCTION in the sentence, not a dictionary fragment. For modal patterns ("would rather", "had better", "used to"), translate the full function naturally in Portuguese.
 - Specific guardrail for "rather":
@@ -1368,6 +1396,7 @@ Provide up to 2 EXACT and most common translations in Portuguese, separated by a
     : `STEP 2 — TRANSLATION (Brazilian Portuguese, 2009 Orthographic Agreement)
 Provide EXACTLY 1 main translation in Portuguese (NO slash separators).
 - GOLDEN RULE: The chosen translation MUST make complete, natural sense when mentally substituted into the example sentence you generate in STEP 5.
+- IDIOMATIC PHRASE RULE: If partOfSpeech is "phrase", translate the intended meaning in natural Brazilian Portuguese. Do NOT produce literal calques, broken commands, or word-by-word fragments. Example: "mind your own business" -> "cuide da sua vida".
 - DO NOT over-simplify adverbs or nuanced expressions (e.g., do NOT translate "rather" as just "mais").
 - CONTEXT-FIRST RULE: prioritize the FUNCTION in the sentence, not a dictionary fragment. For modal patterns ("would rather", "had better", "used to"), translate the full function naturally in Portuguese.
 - Specific guardrail for "rather": when the sentence expresses preference ("would rather"), the translation must map to "preferir" / "em vez de", not "antes que".
@@ -1407,7 +1436,7 @@ ${efommInstruction}
 ══════════════════════════════════════════
 STEP 0 — INPUT NORMALIZATION
 ══════════════════════════════════════════
-- Acronym expansion: If the input follows the pattern "full term (ACRONYM)", normalize to the ACRONYM in uppercase and set partOfSpeech to "acronym".
+- FULL TERM + ACRONYM RULE: If the input follows the pattern "full term (ACRONYM)", keep the FULL TERM as the main entry and classify it as "phrase". Treat the acronym only as supporting context, not as the main partOfSpeech.
 - CASE-INSENSITIVE ACRONYM CHECK: For one-token entries typed in lowercase/mixed case (e.g., "oow"), first test normal lexical classes; if none fits naturally and the form is an established acronym, convert to uppercase and set partOfSpeech to "acronym".
 - "-ing" morphology: If the word ends in "-ing", determine whether it functions as a verbal noun (→ noun) or gerund/present participle (→ verb) based on standard usage.
 - Silently correct hyphenation errors and bare infinitives before processing.
@@ -1418,7 +1447,9 @@ STEP 1 — PART OF SPEECH (partOfSpeech)
 Classify using EXACTLY one of: verb | noun | adjective | adverb | preposition | conjunction | interjection | phrase | acronym
 - Return "phrase" ONLY for multi-word expressions that contain a space.
 - Use "acronym" only when the entry is an established abbreviation/sigla; do not force acronym for regular dictionary words.
+- If the input contains spaces, do NOT downgrade it to noun/adjective/etc. Keep it as "phrase".
 - The chosen partOfSpeech GOVERNS every other field — never contradict it.
+- If the final partOfSpeech is "phrase" or "acronym", prefer one precise translation over multiple near-duplicates.
 
 ══════════════════════════════════════════
 ${translationInstruction}
@@ -1466,6 +1497,7 @@ Before outputting, you MUST fill a concise "_internalReview" object first, then 
 6. PORTUGUESE ORTHOGRAPHY: Does all Portuguese text comply with the 2009 Agreement?
 7. ANTI-HALLUCINATION: Are you fully confident about every claim regarding this word's meaning?
 8. ZERO-FLUFF AUDIT: Is this a basic, everyday 1:1 vocabulary word (like 'car', 'blue', 'buy')? If YES, you MUST clear the "usageNote" field to "". Only keep notes for real learner traps.
+9. PHRASE NATURALNESS: If partOfSpeech is "phrase", is the Portuguese translation a real, natural equivalent rather than a literal calque or malformed fragment?
 
 Rules for "_internalReview":
 - Keep it SHORT and STRUCTURED only.
@@ -1489,7 +1521,8 @@ Return ONLY a valid JSON object. Do NOT wrap it in code blocks. Do NOT add comme
       {"rule": "alternative_forms_validity", "status": "pass|fail", "fixApplied": "short note"},
       {"rule": "usage_note_format", "status": "pass|fail", "fixApplied": "short note"},
       {"rule": "ptbr_orthography", "status": "pass|fail", "fixApplied": "short note"},
-      {"rule": "anti_hallucination", "status": "pass|fail", "fixApplied": "short note"}
+      {"rule": "anti_hallucination", "status": "pass|fail", "fixApplied": "short note"},
+      {"rule": "phrase_naturalness", "status": "pass|fail", "fixApplied": "short note"}
     ]
   },
   "normalizedWord": "the word",
@@ -1585,6 +1618,8 @@ Be ULTRA CONCISE and DIRECT (2–3 short sentences maximum).
 - PROHIBITED: Markdown syntax (**, *, #), line breaks, or bullet points. Continuous plain text only.
 - ZERO-FLUFF RULE (CRITICAL): DO NOT state the obvious. If the word is a basic object, animal, color, common action, or everyday 1:1 translation, YOU MUST RETURN "usageNote": "".
 - ONLY write a usage note IF AND ONLY IF there is a high risk of confusion for Brazilian learners (false cognates, modals, etc).
+- PHRASE RULE: If the received partOfSpeech is "phrase", prefer keeping a short note that explains idiomatic meaning, tone, register, regional force, or why a literal reading would mislead the learner.
+- TECHNICAL TERM RULE: If the received entry is a technical expression or acronym/sigla, keep a concise defining note whenever the technical specificity is necessary to understand the translation.
 - When a usage note is needed, prefer short labeled chunks (e.g., "Preferência:", "Nuance:", "Contraste:", "Estrutura:") so ideas are visually separated.
 - For highly versatile adverbs (especially "rather"), prefer this compact format: "Advérbio versátil. Principais usos: Preferência: ... Intensificador: ... Contraste: ...".
 - Write naturally. You MAY use short inline labels like "Nuance:" to introduce a secondary use, but DO NOT repeat the word "Nuance:" multiple times.`
@@ -1619,7 +1654,8 @@ Your task:
 - Update ALL fields to be fully consistent with the NEW translation.
 - The received partOfSpeech is mandatory. Do NOT mix other usages in the main context.
 - MANDATORY SYNC: The "example" sentence MUST perfectly align with the NEW translation. NEVER leave example fields empty.
-- If the received partOfSpeech is "acronym", translation MUST be a single form (NO slash separators).
+- If the received partOfSpeech is "phrase" or "acronym", translation MUST be a single form (NO slash separators).
+- If the received partOfSpeech is "phrase", prefer the most natural Brazilian Portuguese equivalent, not a literal or malformed calque.
 
 Synonyms instruction: ${synonymsInstruction}
 Usage note instruction: ${usageNoteInstruction}
@@ -1637,6 +1673,7 @@ Before outputting, you MUST fill a concise "_internalReview" object first, then 
 5. USAGE NOTE FORMATTING: Is "usageNote" plain text with no markdown, no line breaks, no bullet points?
 6. PORTUGUESE ORTHOGRAPHY: Does all Portuguese text follow the 2009 agreement?
 7. ZERO-FLUFF AUDIT: Is this a basic, everyday 1:1 vocabulary word? If YES, you MUST clear the "usageNote" field to "".
+8. PHRASE NATURALNESS: If partOfSpeech is "phrase", is the Portuguese translation genuinely natural and idiomatic?
 
 Rules for "_internalReview":
 - Keep it SHORT and STRUCTURED only.
@@ -1656,7 +1693,8 @@ Return the exact JSON:
       {"rule": "synonym_accuracy", "status": "pass|fail", "fixApplied": "short note"},
       {"rule": "alternative_forms_validity", "status": "pass|fail", "fixApplied": "short note"},
       {"rule": "usage_note_format", "status": "pass|fail", "fixApplied": "short note"},
-      {"rule": "ptbr_orthography", "status": "pass|fail", "fixApplied": "short note"}
+      {"rule": "ptbr_orthography", "status": "pass|fail", "fixApplied": "short note"},
+      {"rule": "phrase_naturalness", "status": "pass|fail", "fixApplied": "short note"}
     ]
   },
   "translation": "translation provided by the user",
