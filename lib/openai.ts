@@ -285,6 +285,28 @@ function isTranslationKindCompatibleWithPartOfSpeech(kind: string, partOfSpeech:
   return true
 }
 
+function realignPartOfSpeechByTranslation(partOfSpeech: string, translation: string): string {
+  if (partOfSpeech === "phrase" || partOfSpeech === "acronym") return partOfSpeech
+
+  const primaryChunk = pickPrimaryTranslation(translation)
+  const kind = guessPtBrTranslationKind(primaryChunk)
+  if (kind === "unknown") return partOfSpeech
+
+  if (isTranslationKindCompatibleWithPartOfSpeech(kind, partOfSpeech)) {
+    return partOfSpeech
+  }
+
+  if (kind === "verb") return "verb"
+  if (kind === "adverb") return "adverb"
+  if (kind === "preposition") return "preposition"
+  if (kind === "conjunction") return "conjunction"
+  if (kind === "interjection") return "interjection"
+  if (kind === "adjective") return "adjective"
+  if (kind === "noun_or_phrase") return "noun"
+
+  return partOfSpeech
+}
+
 function normalizeTranslationByPartOfSpeech(
   value: unknown,
   includeMultipleTranslations: boolean,
@@ -1332,14 +1354,30 @@ function normalizeFlashcardResponse(
     translation: normalizeTranslationText(raw?.translation),
     usageNote: asTrimmedString(raw?.usageNote),
   })
-  const partOfSpeech = targetPos ?? fallbackResult.partOfSpeech
-  const normalizedWord = partOfSpeech === "acronym" ? fallbackResult.normalizedWord : initialNormalizedWord
-  const translationByPartOfSpeech = normalizeTranslationByPartOfSpeech(
+  const rawPartOfSpeech = targetPos ?? fallbackResult.partOfSpeech
+  let partOfSpeech = rawPartOfSpeech
+  const normalizedWord = rawPartOfSpeech === "acronym" ? fallbackResult.normalizedWord : initialNormalizedWord
+  let translationByPartOfSpeech = normalizeTranslationByPartOfSpeech(
     raw?.translation,
     options.includeMultipleTranslations,
     partOfSpeech
   )
-  const translation = normalizePtBrOrthography(normalizeTranslationByLexicalGuards(normalizedWord, translationByPartOfSpeech))
+  let translation = normalizePtBrOrthography(normalizeTranslationByLexicalGuards(normalizedWord, translationByPartOfSpeech))
+
+  // Keep card tag aligned with the final translation class when model POS drifts.
+  if (!targetPos) {
+    const alignedPartOfSpeech = realignPartOfSpeechByTranslation(partOfSpeech, translation)
+    if (alignedPartOfSpeech !== partOfSpeech) {
+      partOfSpeech = alignedPartOfSpeech
+      translationByPartOfSpeech = normalizeTranslationByPartOfSpeech(
+        raw?.translation,
+        options.includeMultipleTranslations,
+        partOfSpeech
+      )
+      translation = normalizePtBrOrthography(normalizeTranslationByLexicalGuards(normalizedWord, translationByPartOfSpeech))
+    }
+  }
+
   const usageNote = normalizeUsageNoteByPartOfSpeech(raw?.usageNote, partOfSpeech, normalizedWord, translation)
   const example = normalizeInlineWhitespace(raw?.example)
   const exampleTranslation = normalizePtBrOrthography(raw?.exampleTranslation)
