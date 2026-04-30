@@ -676,6 +676,12 @@ function normalizeUsageSentence(value: string): string {
   return text.replace(/[.!?]$/, "").trim()
 }
 
+function capitalizeSentenceStart(value: string): string {
+  const normalized = normalizeInlineWhitespace(value)
+  if (!normalized) return ""
+  return normalized.replace(/^[a-zà-ÿ]/i, (char) => char.toUpperCase())
+}
+
 function enrichVagueUsageByPartOfSpeech(text: string, partOfSpeech: string): string {
   let normalized = normalizeInlineWhitespace(text)
   if (!normalized) return ""
@@ -703,19 +709,7 @@ function normalizeUsageNoteByPartOfSpeech(value: unknown, partOfSpeech: string, 
   if (!raw) return ""
 
   const cleaned = raw
-    .replace(/[“”]/g, '"')
-    .replace(/[‘’]/g, "'")
-    .replace(/^\s*aten[cç][aã]o\s*[:,-]?\s*/i, "")
-    .replace(/\bfalso\s+cognato\b[.:!?-]?\s*/gi, "")
-    .replace(/\beste\s+[ée]\s+um\s+falso\s+cognato\b[.:!?-]?\s*/gi, "")
-    .replace(/^\s*este\s+[ée]\s+um\s*[:,-]?\s*/i, "")
-    .replace(/\bn[aã]o\s+significa\b[^.?!]*[.?!]?/gi, "")
-    .replace(/\bn[aã]o\s+quer\s+dizer\b[^.?!]*[.?!]?/gi, "")
     .replace(/\bem\s+ingl[eê]s\b[,:-]?\s*/gi, "")
-    .replace(/\bo\s+ingl[eê]s\b[,:-]?\s*/gi, "")
-    .replace(/\([^)]*em\s+portugu[eê]s[^)]*\)/gi, "")
-    .replace(/\bn[aã]o\s+confundir\s+os\s+dois\s+usos\b[.!]?/gi, "")
-    .replace(/\bn[aã]o\s+confundir\b[^.?!]*[.?!]?/gi, "")
     .replace(/\b(Como\s+[A-Za-zÀ-ÿ]+|Nuance|Estrutura\s+comum|Estrutura|Prefer[eê]ncia(?:\s*\/\s*Alternativa)?|Contraste|Outro\s+uso|Intensificador|Atenuador|Uso\s+principal|Principais\s+usos?)\s*:\s*/gi, "")
     .replace(/\s+/g, " ")
     .trim()
@@ -743,7 +737,11 @@ function normalizeUsageNoteByPartOfSpeech(value: unknown, partOfSpeech: string, 
 
   if (filteredSentences.length === 0) return ""
 
-  return filteredSentences.slice(0, 2).map((s) => `${s}.`).join(" ")
+  return filteredSentences
+    .slice(0, 2)
+    .map((s) => capitalizeSentenceStart(s))
+    .map((s) => `${s}.`)
+    .join(" ")
 }
 
 function normalizePartOfSpeech(value: unknown, fallback: string = "noun"): string {
@@ -1748,15 +1746,16 @@ If "partOfSpeech" is "verb", provide all 6 tenses. If NOT a verb, set "conjugati
 Be ULTRA CONCISE and DIRECT (flashcard style, 2–3 short sentences maximum).
 - PROHIBITED: Markdown syntax (**, *, #), bullet points, or embedded line breaks (\\n). The text must be continuous and plain.
 - ZERO-FLUFF RULE (CRITICAL): DO NOT state the obvious. If the word is a basic object, animal, color, common action, or everyday 1:1 translation (e.g., "apple", "car", "blue", "run", "bought", "house", "dog"), YOU MUST RETURN "usageNote": "".
-- ONLY write a usage note IF AND ONLY IF there is a high risk of confusion for Brazilian learners: false cognates (e.g., "actually"), tricky modals ("rather"), preposition mismatches ("depend on"), strict maritime technical jargon, or HOMOGRAPH TRAPS (see below).
+- ONLY write a usage note IF AND ONLY IF there is a high risk of confusion for Brazilian learners: misleading lookalike meanings (e.g., "actually"), tricky modals ("rather"), preposition mismatches ("depend on"), strict maritime technical jargon, or HOMOGRAPH TRAPS (see below).
 - PHRASE RULE: If partOfSpeech is "phrase", prefer keeping a short usage note that explains the idiomatic meaning, tone, register, regional force, or why a literal translation would mislead the learner.
 - TECHNICAL TERM RULE: If the entry is a technical expression or acronym/sigla (e.g., CWQ), you MUST include a short defining usage note whenever the technical specificity is needed to understand the term. Example: "CWQ significa Challenging Water Quality: águas com altos níveis de contaminantes que tornam o tratamento convencional difícil ou ineficiente."
 - When a usage note is needed, write a short plain-text explanation in 1–2 direct sentences.
+- Mention the studied term explicitly in double quotes in the first sentence (e.g., "agenda" refere-se a...).
+- Parentheses are allowed for short clarifications when they improve clarity.
+- Avoid generic warning openers; explain the meaning directly.
 - HOMOGRAPH TRAP RULE: If the word is a verb that shares its spelling with another verb of completely different etymology and conjugation pattern (e.g., "lie" = mentir [regular: lied/lied] vs "lie" = deitar [irregular: lay/lain]), you MUST include a usage note warning: state the meaning being translated, its conjugation pattern (regular/irregular), and briefly contrast with the other homograph's meaning and conjugation. Example: "Este 'lie' significa mentir e é regular (lied/lied). Não confundir com 'lie' = deitar, que é irregular (lay/lain)."
 - VERSATILE ADVERB RULE: For highly versatile adverbs (especially "rather"), prefer this compact structure in PT-BR: "Advérbio versátil. Principais usos: Preferência: ... Intensificador: ... Contraste: ...". Keep it plain text and concise.
 - If generating a note, write naturally and avoid section labels.
-- Never use metalinguistic labels in usageNote such as "falso cognato", "em inglês", or "o inglês". Explain the meaning directly.
-- Do not use contrastive negation phrasing like "não significa X em português" or "não quer dizer X". State only the intended meaning directly.
 - If the word is an ACRONYM, MANDATORY: spell out what each letter stands for (in English), then explain the meaning in Portuguese.`
     : `STEP 3 — USAGE NOTE: Do NOT generate a usage note. Always return "usageNote": "".`
 
@@ -1773,7 +1772,7 @@ Provide up to 2 EXACT and most common translations in Portuguese, separated by a
 - IDIOMATIC PHRASE RULE: If partOfSpeech is "phrase", translate the intended meaning in natural Brazilian Portuguese. Do NOT produce literal calques, broken commands, or word-by-word fragments. Example: "mind your own business" -> "cuide da sua vida", not "cada um no seu".
 - DO NOT over-simplify adverbs or nuanced expressions (e.g., do NOT translate "rather" as just "mais"; use full nuance forms like "em vez de / bastante" or "um tanto").
 - ADVERB PRECISION: keep the translation as adverbial function (not noun/verb/adjective). For "hardly", prefer "raramente" / "quase nunca" ("pouquíssimas vezes" is also acceptable).
-- FALSE COGNATE PRIORITY: for known false cognates for PT-BR learners (e.g., eventually, agenda, exquisite), prioritize the pedagogically correct meaning in translation and example. If mentioning the literal lookalike, mention it only in usageNote as a contrast.
+- MEANING PRIORITY: for words with misleading lookalike meanings for PT-BR learners (e.g., eventually, agenda, exquisite), prioritize the pedagogically relevant meaning in translation and example. If mentioning the literal lookalike, do it only as a short contrast in usageNote.
 - CONTEXT-FIRST RULE: prioritize the FUNCTION in the sentence, not a dictionary fragment. For modal patterns ("would rather", "had better", "used to"), translate the full function naturally in Portuguese.
 - Specific guardrail for "rather":
   * "I'd rather stay home than go out tonight." → translation sense should map to "preferir" / "em vez de", never to "antes que".
@@ -1787,7 +1786,7 @@ Provide EXACTLY 1 main translation in Portuguese (NO slash separators).
 - IDIOMATIC PHRASE RULE: If partOfSpeech is "phrase", translate the intended meaning in natural Brazilian Portuguese. Do NOT produce literal calques, broken commands, or word-by-word fragments. Example: "mind your own business" -> "cuide da sua vida".
 - DO NOT over-simplify adverbs or nuanced expressions (e.g., do NOT translate "rather" as just "mais").
 - ADVERB PRECISION: keep the translation as adverbial function (not noun/verb/adjective). For "hardly", prefer "raramente" or "quase nunca".
-- FALSE COGNATE PRIORITY: for known false cognates for PT-BR learners (e.g., eventually, agenda, exquisite), prioritize the pedagogically correct meaning in translation and example. If mentioning the literal lookalike, mention it only in usageNote as a contrast.
+- MEANING PRIORITY: for words with misleading lookalike meanings for PT-BR learners (e.g., eventually, agenda, exquisite), prioritize the pedagogically relevant meaning in translation and example. If mentioning the literal lookalike, do it only as a short contrast in usageNote.
 - CONTEXT-FIRST RULE: prioritize the FUNCTION in the sentence, not a dictionary fragment. For modal patterns ("would rather", "had better", "used to"), translate the full function naturally in Portuguese.
 - Specific guardrail for "rather": when the sentence expresses preference ("would rather"), the translation must map to "preferir" / "em vez de", not "antes que".
 - For nouns and phrases, ALWAYS include the definite article (e.g., "a proa", "o porto").
@@ -2008,21 +2007,22 @@ export async function reviseFlashcardByTranslation(
         "Be ULTRA CONCISE and DIRECT (2–3 short sentences maximum).",
         "- PROHIBITED: Markdown syntax (**, *, #), line breaks, or bullet points. Continuous plain text only.",
         "- ZERO-FLUFF RULE (CRITICAL): DO NOT state the obvious. If the word is a basic object, animal, color, common action, or everyday 1:1 translation, YOU MUST RETURN \"usageNote\": \"\".",
-        "- ONLY write a usage note IF AND ONLY IF there is a high risk of confusion for Brazilian learners (false cognates, modals, etc).",
+        "- ONLY write a usage note IF AND ONLY IF there is a high risk of confusion for Brazilian learners (misleading lookalike meanings, modals, etc).",
         "- PHRASE RULE: If the received partOfSpeech is \"phrase\", prefer keeping a short note that explains idiomatic meaning, tone, register, regional force, or why a literal reading would mislead the learner.",
         "- TECHNICAL TERM RULE: If the received entry is a technical expression or acronym/sigla, keep a concise defining note whenever the technical specificity is necessary to understand the translation.",
         "- When a usage note is needed, keep it as plain text in 1–2 direct sentences.",
+        "- Mention the studied term explicitly in double quotes in the first sentence (e.g., \"agenda\" refere-se a...).",
+        "- Parentheses are allowed for short clarifications when they improve clarity.",
+        "- Avoid generic warning openers; explain the meaning directly.",
         "- For highly versatile adverbs (especially \"rather\"), prefer this compact format: \"Advérbio versátil. Principais usos: Preferência: ... Intensificador: ... Contraste: ...\".",
         "- Write naturally and avoid section labels.",
-        "- Never use metalinguistic labels in usageNote such as \"falso cognato\", \"em inglês\", or \"o inglês\". Explain the meaning directly.",
-        "- Do not use contrastive negation phrasing like \"não significa X em português\" or \"não quer dizer X\". State only the intended meaning directly.",
       ].join("\n")
     : "USAGE NOTE: Do NOT generate a usage note. Always return \"usageNote\": \"\"."
 
   const contextPolicyInstruction =
     contextMode === "always"
       ? `CONTEXT POLICY: Keep "usageNote" for all entries.`
-      : `CONTEXT POLICY: Keep "usageNote" only when there is real learner value (false cognate, modal/idiomatic function, register shift, or technical maritime contrast). For straightforward 1:1 concrete vocabulary, return "usageNote": "". However, ALWAYS generate the example fields.`
+      : `CONTEXT POLICY: Keep "usageNote" only when there is real learner value (misleading lookalike meaning, modal/idiomatic function, register shift, or technical maritime contrast). For straightforward 1:1 concrete vocabulary, return "usageNote": "". However, ALWAYS generate the example fields.`
 
   const efommInstruction = efommMode
     ? `EFOMM MODE (MARITIME): Prefer naval/port contexts if plausible and reflect this in "usageNote". Avoid forced literal translations for technical terms.`
@@ -2055,7 +2055,7 @@ Synonyms instruction: ${synonymsInstruction}
 Usage note instruction: ${usageNoteInstruction}
 Alternative forms instruction: ${alternativeFormsInstruction}
 ${contextPolicyInstruction}
-- FALSE COGNATE PRIORITY: if the received word is a common false cognate for PT-BR learners (e.g., eventually, agenda, exquisite), keep translation/example aligned to the learner-safe meaning. If needed, mention the literal lookalike only as a short warning inside usageNote.
+- MEANING PRIORITY: if the received word has a common misleading lookalike meaning for PT-BR learners (e.g., eventually, agenda, exquisite), keep translation/example aligned to the learner-safe meaning. If needed, mention the literal lookalike only as a short contrast inside usageNote.
 
 ══════════════════════════════════════════
 MANDATORY SELF-REVIEW (complete before outputting)
@@ -2197,6 +2197,46 @@ interface GrammarQuestionResponse {
   options: GrammarQuestionOption[]
 }
 
+function normalizeGrammarQuestionText(value: unknown): string {
+  const text = normalizeInlineWhitespace(value)
+  if (!text) return "Choose the best option."
+
+  return text
+    .replace(/\([^)]*(opinion\s*>\s*size|size\s*>\s*age|ordem\s+dos\s+adjetivos|sequ[eê]ncia\s+padr[aã]o)[^)]*\)/gi, "")
+    .replace(/^\s*contexto\s*:\s*/i, "")
+    .replace(/\s{2,}/g, " ")
+    .trim()
+}
+
+function isLikelyGrammarRuleDump(text: string): boolean {
+  const normalized = normalizeForLooseMatch(text)
+  return /(regra|sequencia padrao|sequencia|ordem dos adjetivos|estrutura padrao|gramatica|analise as frases|opinion\s*>\s*size|size\s*>\s*age|age\s*>\s*shape|shape\s*>\s*color|color\s*>\s*origin|origin\s*>\s*material|material\s*>\s*purpose)/i.test(
+    normalized
+  )
+}
+
+function normalizeGrammarContextPassage(value: unknown): string | null {
+  const text = normalizeInlineWhitespace(value)
+  if (!text) return null
+
+  const cleaned = text
+    .replace(/^\s*texto\s+de\s+apoio\s*:\s*/i, "")
+    .replace(/^\s*contexto\s*:\s*/i, "")
+    .trim()
+
+  if (!cleaned) return null
+  if (isLikelyGrammarRuleDump(cleaned)) return null
+
+  const hasScenarioSignal =
+    /(imagine|situa[cç][aã]o|cen[aá]rio|durante|enquanto|em uma|numa|no\s+escritorio|na\s+escola|na\s+reuni[aã]o|conversa|email|mensagem|atendimento|loja|trabalho|viagem|aula)/i.test(
+      normalizeForLooseMatch(cleaned)
+    )
+
+  if (!hasScenarioSignal && cleaned.length < 45) return null
+
+  return cleaned
+}
+
 function normalizeOptions(raw: unknown): GrammarQuestionOption[] {
   const letters: GrammarQuestionOption["letter"][] = ["A", "B", "C", "D", "E"]
   const fallback = letters.map((letter, idx) => ({
@@ -2242,28 +2282,36 @@ export async function generateGrammarQuestion(
 ): Promise<GrammarQuestionResponse> {
   const scope = [topicLabel, ...subtopics].filter(Boolean).join(" > ")
   const userWordsHint = Array.isArray(userWords) && userWords.length > 0
-    ? `Use naturalmente algumas destas palavras do aluno quando fizer sentido: ${userWords.slice(0, 20).join(", ")}.`
+    ? `Naturally incorporate some of the learner words when appropriate: ${userWords.slice(0, 20).join(", ")}.`
     : ""
 
   const messages: OpenRouterMessage[] = [
     {
       role: "system",
-      content: `Você é um professor de Inglês Americano para brasileiros. Gere 1 questão de múltipla escolha com 5 alternativas (A-E).
+      content: `You are an American English grammar teacher for Brazilian learners.
 
-Tipo da questão:
-- correct: apenas 1 frase está gramaticalmente correta.
-- incorrect: apenas 1 frase está gramaticalmente incorreta.
+Create ONE multiple-choice question with 5 options (A-E).
 
-Regras:
-- Tema principal: ${topicLabel}.
-- Subtópicos: ${subtopics.join(", ") || "(nenhum)"}.
-- Dificuldade: intermediário.
-- Frases naturais em inglês americano.
-- Forneça explicações curtas em português brasileiro para cada alternativa.
-- Não use conteúdo ofensivo.
+Question mode:
+- correct: exactly 1 option is grammatically correct.
+- incorrect: exactly 1 option is grammatically incorrect.
+
+Scope and difficulty:
+- Main topic: ${topicLabel}
+- Subtopics: ${subtopics.join(", ") || "(none)"}
+- Difficulty: intermediate
+- You may combine topic + subtopics in a single question when it improves realism.
+
+Output quality rules:
+- Use natural American English sentences.
+- "questionText" must contain only the task instruction. Do NOT explain grammar rules.
+- "contextPassage" must be a useful mini-scenario (practical context), not a rule lecture.
+- NEVER include teaching-rule text such as "order of adjectives", "rule", "standard sequence", "analyze the sentences", or chains like "Opinion > Size > ...".
+- Provide short explanations in Brazilian Portuguese for each option.
+- Avoid harmful/offensive content.
 ${userWordsHint}
 
-Retorne JSON com exatamente:
+Return valid JSON with exactly this shape:
 {
   "questionText": "...",
   "contextPassage": "..." | null,
@@ -2276,11 +2324,11 @@ Retorne JSON com exatamente:
   ]
 }
 
-Garanta exatamente uma alternativa correta para o tipo solicitado.`,
+Ensure exactly one correct answer for the requested mode.`,
     },
     {
       role: "user",
-      content: `Crie uma questão do tipo "${questionType}" para o escopo: ${scope || topicLabel}.`,
+      content: `Create a "${questionType}" question for this scope: ${scope || topicLabel}.`,
     },
   ]
 
@@ -2289,8 +2337,8 @@ Garanta exatamente uma alternativa correta para o tipo solicitado.`,
   })
 
   return {
-    questionText: generated?.questionText ?? "Choose the best option.",
-    contextPassage: generated?.contextPassage ?? null,
+    questionText: normalizeGrammarQuestionText(generated?.questionText),
+    contextPassage: normalizeGrammarContextPassage(generated?.contextPassage),
     options: normalizeOptions(generated?.options),
   }
 }
@@ -2304,15 +2352,20 @@ export async function evaluateGrammarQuestion(
   const messages: OpenRouterMessage[] = [
     {
       role: "system",
-      content: `Você é um revisor de qualidade para questões de gramática em Inglês Americano.
-Revise a questão recebida, preserve o mesmo tipo (${questionType}) e retorne somente JSON na mesma estrutura.
-Garanta:
-- 5 alternativas (A-E)
-- exatamente uma resposta correta
-- explicações curtas em português brasileiro
-- texto natural e sem ambiguidade
+      content: `You are a quality reviewer for American English grammar questions.
 
-Retorne apenas:
+Review the incoming question, keep the same mode (${questionType}), and return JSON only in the same structure.
+
+Must guarantee:
+- 5 options (A-E)
+- exactly one correct answer
+- short explanations in Brazilian Portuguese
+- natural, unambiguous wording
+- "questionText" contains only the task instruction (no rule explanation)
+- "contextPassage" is useful and situational, never a grammar lecture
+- remove any rule-teaching text in both question and support text (e.g., standard sequences, adjective-order formulas, "analyze the sentences")
+
+Return only:
 {
   "questionText": "...",
   "contextPassage": "..." | null,
@@ -2335,9 +2388,12 @@ Retorne apenas:
     type: "json_object",
   })
 
+  const generatedQuestionText = normalizeGrammarQuestionText(generated.questionText)
+  const generatedContextPassage = normalizeGrammarContextPassage(generated.contextPassage)
+
   return {
-    questionText: reviewed?.questionText ?? generated.questionText,
-    contextPassage: reviewed?.contextPassage ?? generated.contextPassage ?? null,
+    questionText: normalizeGrammarQuestionText(reviewed?.questionText ?? generatedQuestionText),
+    contextPassage: normalizeGrammarContextPassage(reviewed?.contextPassage ?? generatedContextPassage),
     options: normalizeOptions(reviewed?.options),
   }
 }
