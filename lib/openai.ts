@@ -705,6 +705,15 @@ function normalizeUsageNoteByPartOfSpeech(value: unknown, partOfSpeech: string, 
   const cleaned = raw
     .replace(/[“”]/g, '"')
     .replace(/[‘’]/g, "'")
+    .replace(/^\s*aten[cç][aã]o\s*[:,-]?\s*/i, "")
+    .replace(/\bfalso\s+cognato\b[.:!?-]?\s*/gi, "")
+    .replace(/\beste\s+[ée]\s+um\s+falso\s+cognato\b[.:!?-]?\s*/gi, "")
+    .replace(/^\s*este\s+[ée]\s+um\s*[:,-]?\s*/i, "")
+    .replace(/\bn[aã]o\s+significa\b[^.?!]*[.?!]?/gi, "")
+    .replace(/\bn[aã]o\s+quer\s+dizer\b[^.?!]*[.?!]?/gi, "")
+    .replace(/\bem\s+ingl[eê]s\b[,:-]?\s*/gi, "")
+    .replace(/\bo\s+ingl[eê]s\b[,:-]?\s*/gi, "")
+    .replace(/\([^)]*em\s+portugu[eê]s[^)]*\)/gi, "")
     .replace(/\bn[aã]o\s+confundir\s+os\s+dois\s+usos\b[.!]?/gi, "")
     .replace(/\bn[aã]o\s+confundir\b[^.?!]*[.?!]?/gi, "")
     .replace(/\b(Como\s+[A-Za-zÀ-ÿ]+|Nuance|Estrutura\s+comum|Estrutura|Prefer[eê]ncia(?:\s*\/\s*Alternativa)?|Contraste|Outro\s+uso|Intensificador|Atenuador|Uso\s+principal|Principais\s+usos?)\s*:\s*/gi, "")
@@ -1165,6 +1174,8 @@ function isLikelyBrazilianLearnerTrapWord(word: string): boolean {
     "rather",
     "actually",
     "eventually",
+    "agenda",
+    "exquisite",
     "pretend",
     "sensible",
     "realize",
@@ -1255,9 +1266,13 @@ function shouldSuppressUsageAndExample(params: {
   return true
 }
 
-function normalizeTranslationByLexicalGuards(word: string, translation: string): string {
+function normalizeTranslationByLexicalGuards(
+  word: string,
+  translation: string,
+  _options?: { partOfSpeech?: string; includeMultipleTranslations?: boolean }
+): string {
   const normalizedWord = normalizeInlineWhitespace(word).toLowerCase()
-  const normalizedTranslation = normalizeTranslationText(translation)
+  let normalizedTranslation = normalizeTranslationText(translation)
 
   // Deterministic fix for a frequent nautical hallucination.
   if (normalizedWord === "portside") {
@@ -1362,7 +1377,12 @@ function normalizeFlashcardResponse(
     options.includeMultipleTranslations,
     partOfSpeech
   )
-  let translation = normalizePtBrOrthography(normalizeTranslationByLexicalGuards(normalizedWord, translationByPartOfSpeech))
+  let translation = normalizePtBrOrthography(
+    normalizeTranslationByLexicalGuards(normalizedWord, translationByPartOfSpeech, {
+      partOfSpeech,
+      includeMultipleTranslations: options.includeMultipleTranslations,
+    })
+  )
 
   // Keep card tag aligned with the final translation class when model POS drifts.
   if (!targetPos) {
@@ -1374,7 +1394,12 @@ function normalizeFlashcardResponse(
         options.includeMultipleTranslations,
         partOfSpeech
       )
-      translation = normalizePtBrOrthography(normalizeTranslationByLexicalGuards(normalizedWord, translationByPartOfSpeech))
+      translation = normalizePtBrOrthography(
+        normalizeTranslationByLexicalGuards(normalizedWord, translationByPartOfSpeech, {
+          partOfSpeech,
+          includeMultipleTranslations: options.includeMultipleTranslations,
+        })
+      )
     }
   }
 
@@ -1453,8 +1478,11 @@ function normalizeRevisionResponse(
     efommMode?: boolean
   }
 ): FlashcardRevisionResponse {
-  const normalizedTranslation = normalizeTranslationByLexicalGuards(options.word, normalizeTranslationText(raw?.translation))
   const normalizedPartOfSpeech = normalizePartOfSpeech(options.partOfSpeech)
+  const normalizedTranslation = normalizeTranslationByLexicalGuards(options.word, normalizeTranslationText(raw?.translation), {
+    partOfSpeech: normalizedPartOfSpeech,
+    includeMultipleTranslations: normalizeTranslationText(raw?.translation).includes("/"),
+  })
   const translation = normalizePtBrOrthography(
     normalizedPartOfSpeech === "acronym" || normalizedPartOfSpeech === "phrase"
       ? pickPrimaryTranslation(normalizedTranslation)
@@ -1546,6 +1574,9 @@ async function callOpenRouter<T>(
       model,
       messages,
       temperature: options?.temperature ?? 0.7,
+      provider: {
+        sort: "throughput",
+      },
       ...(responseFormat && { response_format: responseFormat }),
     }),
   })
@@ -1715,6 +1746,8 @@ Be ULTRA CONCISE and DIRECT (flashcard style, 2–3 short sentences maximum).
 - HOMOGRAPH TRAP RULE: If the word is a verb that shares its spelling with another verb of completely different etymology and conjugation pattern (e.g., "lie" = mentir [regular: lied/lied] vs "lie" = deitar [irregular: lay/lain]), you MUST include a usage note warning: state the meaning being translated, its conjugation pattern (regular/irregular), and briefly contrast with the other homograph's meaning and conjugation. Example: "Este 'lie' significa mentir e é regular (lied/lied). Não confundir com 'lie' = deitar, que é irregular (lay/lain)."
 - VERSATILE ADVERB RULE: For highly versatile adverbs (especially "rather"), prefer this compact structure in PT-BR: "Advérbio versátil. Principais usos: Preferência: ... Intensificador: ... Contraste: ...". Keep it plain text and concise.
 - If generating a note, write naturally and avoid section labels.
+- Never use metalinguistic labels in usageNote such as "falso cognato", "em inglês", or "o inglês". Explain the meaning directly.
+- Do not use contrastive negation phrasing like "não significa X em português" or "não quer dizer X". State only the intended meaning directly.
 - If the word is an ACRONYM, MANDATORY: spell out what each letter stands for (in English), then explain the meaning in Portuguese.`
     : `STEP 3 — USAGE NOTE: Do NOT generate a usage note. Always return "usageNote": "".`
 
@@ -1731,6 +1764,7 @@ Provide up to 2 EXACT and most common translations in Portuguese, separated by a
 - IDIOMATIC PHRASE RULE: If partOfSpeech is "phrase", translate the intended meaning in natural Brazilian Portuguese. Do NOT produce literal calques, broken commands, or word-by-word fragments. Example: "mind your own business" -> "cuide da sua vida", not "cada um no seu".
 - DO NOT over-simplify adverbs or nuanced expressions (e.g., do NOT translate "rather" as just "mais"; use full nuance forms like "em vez de / bastante" or "um tanto").
 - ADVERB PRECISION: keep the translation as adverbial function (not noun/verb/adjective). For "hardly", prefer "raramente" / "quase nunca" ("pouquíssimas vezes" is also acceptable).
+- FALSE COGNATE PRIORITY: for known false cognates for PT-BR learners (e.g., eventually, agenda, exquisite), prioritize the pedagogically correct meaning in translation and example. If mentioning the literal lookalike, mention it only in usageNote as a contrast.
 - CONTEXT-FIRST RULE: prioritize the FUNCTION in the sentence, not a dictionary fragment. For modal patterns ("would rather", "had better", "used to"), translate the full function naturally in Portuguese.
 - Specific guardrail for "rather":
   * "I'd rather stay home than go out tonight." → translation sense should map to "preferir" / "em vez de", never to "antes que".
@@ -1744,6 +1778,7 @@ Provide EXACTLY 1 main translation in Portuguese (NO slash separators).
 - IDIOMATIC PHRASE RULE: If partOfSpeech is "phrase", translate the intended meaning in natural Brazilian Portuguese. Do NOT produce literal calques, broken commands, or word-by-word fragments. Example: "mind your own business" -> "cuide da sua vida".
 - DO NOT over-simplify adverbs or nuanced expressions (e.g., do NOT translate "rather" as just "mais").
 - ADVERB PRECISION: keep the translation as adverbial function (not noun/verb/adjective). For "hardly", prefer "raramente" or "quase nunca".
+- FALSE COGNATE PRIORITY: for known false cognates for PT-BR learners (e.g., eventually, agenda, exquisite), prioritize the pedagogically correct meaning in translation and example. If mentioning the literal lookalike, mention it only in usageNote as a contrast.
 - CONTEXT-FIRST RULE: prioritize the FUNCTION in the sentence, not a dictionary fragment. For modal patterns ("would rather", "had better", "used to"), translate the full function naturally in Portuguese.
 - Specific guardrail for "rather": when the sentence expresses preference ("would rather"), the translation must map to "preferir" / "em vez de", not "antes que".
 - For nouns and phrases, ALWAYS include the definite article (e.g., "a proa", "o porto").
@@ -1959,17 +1994,21 @@ export async function reviseFlashcardByTranslation(
     : `Always return "alternativeForms": [].`
 
   const usageNoteInstruction = includeUsageNote
-    ? `USAGE NOTE (Brazilian Portuguese, 2009 Orthographic Agreement):
-Be ULTRA CONCISE and DIRECT (2–3 short sentences maximum).
-- PROHIBITED: Markdown syntax (**, *, #), line breaks, or bullet points. Continuous plain text only.
-- ZERO-FLUFF RULE (CRITICAL): DO NOT state the obvious. If the word is a basic object, animal, color, common action, or everyday 1:1 translation, YOU MUST RETURN "usageNote": "".
-- ONLY write a usage note IF AND ONLY IF there is a high risk of confusion for Brazilian learners (false cognates, modals, etc).
-- PHRASE RULE: If the received partOfSpeech is "phrase", prefer keeping a short note that explains idiomatic meaning, tone, register, regional force, or why a literal reading would mislead the learner.
-- TECHNICAL TERM RULE: If the received entry is a technical expression or acronym/sigla, keep a concise defining note whenever the technical specificity is necessary to understand the translation.
-- When a usage note is needed, keep it as plain text in 1–2 direct sentences.
-- For highly versatile adverbs (especially "rather"), prefer this compact format: "Advérbio versátil. Principais usos: Preferência: ... Intensificador: ... Contraste: ...".
-- Write naturally and avoid section labels.`
-    : `USAGE NOTE: Do NOT generate a usage note. Always return "usageNote": "".`
+    ? [
+        "USAGE NOTE (Brazilian Portuguese, 2009 Orthographic Agreement):",
+        "Be ULTRA CONCISE and DIRECT (2–3 short sentences maximum).",
+        "- PROHIBITED: Markdown syntax (**, *, #), line breaks, or bullet points. Continuous plain text only.",
+        "- ZERO-FLUFF RULE (CRITICAL): DO NOT state the obvious. If the word is a basic object, animal, color, common action, or everyday 1:1 translation, YOU MUST RETURN \"usageNote\": \"\".",
+        "- ONLY write a usage note IF AND ONLY IF there is a high risk of confusion for Brazilian learners (false cognates, modals, etc).",
+        "- PHRASE RULE: If the received partOfSpeech is \"phrase\", prefer keeping a short note that explains idiomatic meaning, tone, register, regional force, or why a literal reading would mislead the learner.",
+        "- TECHNICAL TERM RULE: If the received entry is a technical expression or acronym/sigla, keep a concise defining note whenever the technical specificity is necessary to understand the translation.",
+        "- When a usage note is needed, keep it as plain text in 1–2 direct sentences.",
+        "- For highly versatile adverbs (especially \"rather\"), prefer this compact format: \"Advérbio versátil. Principais usos: Preferência: ... Intensificador: ... Contraste: ...\".",
+        "- Write naturally and avoid section labels.",
+        "- Never use metalinguistic labels in usageNote such as \"falso cognato\", \"em inglês\", or \"o inglês\". Explain the meaning directly.",
+        "- Do not use contrastive negation phrasing like \"não significa X em português\" or \"não quer dizer X\". State only the intended meaning directly.",
+      ].join("\n")
+    : "USAGE NOTE: Do NOT generate a usage note. Always return \"usageNote\": \"\"."
 
   const contextPolicyInstruction =
     contextMode === "always"
@@ -2007,6 +2046,7 @@ Synonyms instruction: ${synonymsInstruction}
 Usage note instruction: ${usageNoteInstruction}
 Alternative forms instruction: ${alternativeFormsInstruction}
 ${contextPolicyInstruction}
+- FALSE COGNATE PRIORITY: if the received word is a common false cognate for PT-BR learners (e.g., eventually, agenda, exquisite), keep translation/example aligned to the learner-safe meaning. If needed, mention the literal lookalike only as a short warning inside usageNote.
 
 ══════════════════════════════════════════
 MANDATORY SELF-REVIEW (complete before outputting)

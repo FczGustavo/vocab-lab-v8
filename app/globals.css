@@ -334,6 +334,15 @@
 }
 
 @layer utilities {
+  .no-scrollbar {
+    -ms-overflow-style: none;
+    scrollbar-width: none;
+  }
+
+  .no-scrollbar::-webkit-scrollbar {
+    display: none;
+  }
+
   .surface-card {
     background: color-mix(in oklab, var(--card) 96%, transparent);
     border-radius: 16px;

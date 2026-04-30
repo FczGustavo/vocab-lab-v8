@@ -334,6 +334,39 @@ export function FlashcardCard({ flashcard, onDelete, onCreateFromAlternative, on
                   </Collapsible>
                   </div>
                 )}
+                {alternativeForms.length > 0 && (
+                  <div className="rounded-lg bg-muted/20 p-3">
+                    <span className="mb-2 block text-[10px] font-bold uppercase tracking-widest text-muted-foreground">
+                      Outras formas
+                    </span>
+                    <div className="space-y-2">
+                      {alternativeForms.map((form, idx) => (
+                        <div key={idx} className="rounded-md bg-muted/30 p-2">
+                          <div className="mb-1 flex items-center gap-2">
+                            <Badge
+                              variant="outline"
+                              className={cn(
+                                "ghost-tag h-4 cursor-pointer border-0 text-[9px] font-medium uppercase tracking-tighter hover:opacity-90",
+                                partOfSpeechColors[form.partOfSpeech]
+                              )}
+                              onClick={(e) => {
+                                e.stopPropagation()
+                                onCreateFromAlternative?.(flashcard, form)
+                              }}
+                            >
+                              {partOfSpeechLabels[form.partOfSpeech]}
+                            </Badge>
+                            <div className="min-w-0 leading-tight">
+                              <p className="truncate text-[11px] font-medium text-foreground">{form.word || ""}</p>
+                              <p className="truncate text-[10px] text-muted-foreground">{form.translation}</p>
+                            </div>
+                          </div>
+                          <p className="text-[10px] italic leading-tight text-muted-foreground">{form.example}</p>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
                 {includeConjugations && flashcard.conjugations && (
                   <div className="rounded-lg bg-primary/5 p-3">
                   <div className="mb-2 flex items-center justify-between">
@@ -535,7 +568,7 @@ export function FlashcardCard({ flashcard, onDelete, onCreateFromAlternative, on
             </div>
           </div>
 
-          <div className="space-y-2.5 flex-1 overflow-y-auto pr-1 [scrollbar-gutter:stable]">
+          <div className="no-scrollbar space-y-2.5 flex-1 overflow-y-auto pr-1 [scrollbar-gutter:stable]">
             <div className="space-y-1.5">
               <p
                 className="cursor-pointer text-xl font-medium leading-snug text-foreground"
@@ -571,6 +604,72 @@ export function FlashcardCard({ flashcard, onDelete, onCreateFromAlternative, on
                 )}
               </div>
             )}
+            {hasContext && (
+              <div className="group/context rounded-xl bg-muted/30 p-3">
+                <Collapsible open={contextExpanded} onOpenChange={setContextExpanded}>
+                    <div className="flex items-center justify-between gap-2">
+                      <span className="text-[10px] font-bold text-muted-foreground uppercase tracking-widest">
+                        Contexto
+                      </span>
+                      <CollapsibleTrigger asChild>
+                        <button
+                          type="button"
+                          className="inline-flex items-center gap-1 text-[10px] font-semibold text-primary opacity-0 transition-opacity group-hover/context:opacity-100 focus-visible:opacity-100"
+                          onClick={(e) => e.stopPropagation()}
+                        >
+                          {contextExpanded ? "Recolher" : "Expandir"}
+                          {contextExpanded ? <ChevronUp className="size-3" /> : <ChevronDown className="size-3" />}
+                        </button>
+                      </CollapsibleTrigger>
+                    </div>
+
+                    <CollapsibleContent className="mt-2">
+                      <p className="text-xs leading-relaxed text-foreground">{usageNoteText}</p>
+                    </CollapsibleContent>
+                </Collapsible>
+              </div>
+            )}
+            
+            {alternativeForms.length > 0 && (
+              <div className="pt-2 border-t border-border/50">
+                <span className="text-[10px] font-bold text-muted-foreground uppercase tracking-widest block mb-2">
+                  Outras formas:
+                </span>
+                <div className="space-y-2">
+                  {alternativeForms.map((form, idx) => (
+                    <div key={idx} className="rounded-xl bg-muted/25 p-2.5">
+                      <div className="flex items-center gap-2 mb-1">
+                        <Badge 
+                          variant="outline" 
+                          className={cn(
+                            "ghost-tag text-[9px] h-4 font-medium uppercase tracking-tighter border-0 cursor-pointer hover:opacity-90",
+                            partOfSpeechColors[form.partOfSpeech]
+                          )}
+                          onClick={(e) => {
+                            e.stopPropagation()
+                            onCreateFromAlternative?.(flashcard, form)
+                          }}
+                        >
+                          {partOfSpeechLabels[form.partOfSpeech]}
+                        </Badge>
+                        <div className="flex flex-col leading-tight min-w-0">
+                          <span className="text-xs font-medium text-foreground truncate">
+                            {form.word || ""}
+                          </span>
+                          <span className="text-[10px] text-muted-foreground truncate">
+                            {form.translation}
+                          </span>
+                        </div>
+                      </div>
+                      <p className="text-[10px] text-muted-foreground italic leading-tight">
+                        {form.example}
+                      </p>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+
             {includeConjugations && flashcard.conjugations && (
               <div className="pt-2 border-t border-border/50">
                 <div className="flex items-center justify-between mb-2">
@@ -617,72 +716,6 @@ export function FlashcardCard({ flashcard, onDelete, onCreateFromAlternative, on
                     </div>
                   </div>
                 )}
-              </div>
-            )}
-
-            {alternativeForms.length > 0 && (
-              <div className="pt-2 border-t border-border/50">
-                <span className="text-[10px] font-bold text-muted-foreground uppercase tracking-widest block mb-2">
-                  Outras formas:
-                </span>
-                <div className="space-y-2">
-                  {alternativeForms.map((form, idx) => (
-                    <div key={idx} className="rounded-xl bg-muted/25 p-2.5">
-                      <div className="flex items-center gap-2 mb-1">
-                        <Badge 
-                          variant="outline" 
-                          className={cn(
-                            "ghost-tag text-[9px] h-4 font-medium uppercase tracking-tighter border-0 cursor-pointer hover:opacity-90",
-                            partOfSpeechColors[form.partOfSpeech]
-                          )}
-                          onClick={(e) => {
-                            e.stopPropagation()
-                            onCreateFromAlternative?.(flashcard, form)
-                          }}
-                        >
-                          {partOfSpeechLabels[form.partOfSpeech]}
-                        </Badge>
-                        <div className="flex flex-col leading-tight min-w-0">
-                          <span className="text-xs font-medium text-foreground truncate">
-                            {form.word || ""}
-                          </span>
-                          <span className="text-[10px] text-muted-foreground truncate">
-                            {form.translation}
-                          </span>
-                        </div>
-                      </div>
-                      <p className="text-[10px] text-muted-foreground italic leading-tight">
-                        {form.example}
-                      </p>
-                    </div>
-                  ))}
-                </div>
-              </div>
-            )}
-
-            {hasContext && (
-              <div className="group/context rounded-xl bg-muted/30 p-3">
-                <Collapsible open={contextExpanded} onOpenChange={setContextExpanded}>
-                    <div className="flex items-center justify-between gap-2">
-                      <span className="text-[10px] font-bold text-muted-foreground uppercase tracking-widest">
-                        Contexto
-                      </span>
-                      <CollapsibleTrigger asChild>
-                        <button
-                          type="button"
-                          className="inline-flex items-center gap-1 text-[10px] font-semibold text-primary opacity-0 transition-opacity group-hover/context:opacity-100 focus-visible:opacity-100"
-                          onClick={(e) => e.stopPropagation()}
-                        >
-                          {contextExpanded ? "Recolher" : "Expandir"}
-                          {contextExpanded ? <ChevronUp className="size-3" /> : <ChevronDown className="size-3" />}
-                        </button>
-                      </CollapsibleTrigger>
-                    </div>
-
-                    <CollapsibleContent className="mt-2">
-                      <p className="text-xs leading-relaxed text-foreground">{usageNoteText}</p>
-                    </CollapsibleContent>
-                </Collapsible>
               </div>
             )}
           </div>
