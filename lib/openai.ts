@@ -734,7 +734,16 @@ function normalizeUsageNoteByPartOfSpeech(value: unknown, partOfSpeech: string, 
 
   if (sentences.length === 0) return ""
 
-  return sentences.slice(0, 2).map((s) => `${s}.`).join(" ")
+  const filteredSentences = sentences.filter((sentence, index) => {
+    if (index !== 0) return true
+
+    const normalized = normalizeForLooseMatch(sentence).replace(/[.!?]/g, "").trim()
+    return !/^(classico|clasico|importante|atencao|observacao|nota)$/.test(normalized)
+  })
+
+  if (filteredSentences.length === 0) return ""
+
+  return filteredSentences.slice(0, 2).map((s) => `${s}.`).join(" ")
 }
 
 function normalizePartOfSpeech(value: unknown, fallback: string = "noun"): string {
