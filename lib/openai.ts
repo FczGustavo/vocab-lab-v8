@@ -2227,12 +2227,32 @@ function normalizeGrammarContextPassage(value: unknown): string | null {
   if (!cleaned) return null
   if (isLikelyGrammarRuleDump(cleaned)) return null
 
+  const normalized = normalizeForLooseMatch(cleaned)
+
+  // Drop repeated/generic story templates that add little signal to solving the question.
+  const genericTemplatePatterns = [
+    /imagine\s+que\s+um\s+grupo\s+de\s+amigos/, 
+    /decoracao\s+de\s+um\s+novo\s+escritorio/,
+    /contexto\s+geral/,
+    /em\s+descricoes\s+formais\s+ou\s+casuais/,
+  ]
+
+  if (genericTemplatePatterns.some((pattern) => pattern.test(normalized))) {
+    return null
+  }
+
   const hasScenarioSignal =
     /(imagine|situa[cç][aã]o|cen[aá]rio|durante|enquanto|em uma|numa|no\s+escritorio|na\s+escola|na\s+reuni[aã]o|conversa|email|mensagem|atendimento|loja|trabalho|viagem|aula)/i.test(
-      normalizeForLooseMatch(cleaned)
+      normalized
+    )
+
+  const hasConcreteAnchor =
+    /(cliente|fornecedor|entrevista|prazo|apresenta[cç][aã]o|relat[oó]rio|contrato|chamado|suporte|turma|professor|reuni[aã]o|projeto|embarque|hotel|aeroporto|consulta|paciente|pedido|or[cç]amento|dashboard|planilha)/i.test(
+      normalized
     )
 
   if (!hasScenarioSignal && cleaned.length < 45) return null
+  if (!hasConcreteAnchor && cleaned.length < 90) return null
 
   return cleaned
 }
@@ -2301,11 +2321,17 @@ Scope and difficulty:
 - Subtopics: ${subtopics.join(", ") || "(none)"}
 - Difficulty: intermediate
 - You may combine topic + subtopics in a single question when it improves realism.
+- Target style: military exam preparation tone inspired by EFOMM / EN / AFA.
+- Build original items only (do NOT copy or paraphrase real exam questions).
 
 Output quality rules:
 - Use natural American English sentences.
 - "questionText" must contain only the task instruction. Do NOT explain grammar rules.
-- "contextPassage" must be a useful mini-scenario (practical context), not a rule lecture.
+- "contextPassage" is OPTIONAL. Default to null.
+- Provide "contextPassage" only when it materially helps the learner disambiguate answer choices.
+- If provided, it must be a concise, concrete mini-scenario (practical context), not a rule lecture.
+- Avoid generic/repeated story templates.
+- When present, prefer high-value contexts common in military-prep exams: maritime operations, technical routines, aviation/academy logistics, formal instructions, reports, and mission-like communication.
 - NEVER include teaching-rule text such as "order of adjectives", "rule", "standard sequence", "analyze the sentences", or chains like "Opinion > Size > ...".
 - Provide short explanations in Brazilian Portuguese for each option.
 - Avoid harmful/offensive content.
@@ -2361,8 +2387,10 @@ Must guarantee:
 - exactly one correct answer
 - short explanations in Brazilian Portuguese
 - natural, unambiguous wording
+- keep an original military-exam-prep tone inspired by EFOMM / EN / AFA (without copying real items)
 - "questionText" contains only the task instruction (no rule explanation)
-- "contextPassage" is useful and situational, never a grammar lecture
+- "contextPassage" is optional and should be null unless it clearly improves disambiguation
+- when present, "contextPassage" must be concrete and non-generic
 - remove any rule-teaching text in both question and support text (e.g., standard sequences, adjective-order formulas, "analyze the sentences")
 
 Return only:
