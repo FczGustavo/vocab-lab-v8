@@ -266,6 +266,21 @@ export function FlashcardsPage() {
     return ok
   }
 
+  const handleClearReviewFolder = async () => {
+    if (reviewFlashcards.length === 0) return
+    const results = await Promise.all(reviewFlashcards.map((card) => removeFromReviewFolder(card.id)))
+    const removedCount = results.filter(Boolean).length
+
+    toast({
+      title: removedCount > 0 ? "Revisão limpa" : "Nada foi alterado",
+      description:
+        removedCount > 0
+          ? `${removedCount} ${removedCount === 1 ? "palavra removida" : "palavras removidas"} da pasta Revisão.`
+          : "Não foi possível remover os cards da Revisão.",
+      variant: removedCount > 0 ? "default" : "destructive",
+    })
+  }
+
   if (isWritingMode) {
     return (
       <WritingMode
@@ -364,19 +379,64 @@ export function FlashcardsPage() {
           </Button>
 
           {reviewFlashcards.length > 0 && (
-            <Button
-              variant="ghost"
-              size="sm"
-              onClick={() => { setIsReviewFolderSelected(true); setSelectedFolderId(null) }}
-              data-active={isReviewFolderSelected}
-              className="ghost-filter h-8 gap-1.5 px-3 text-[13px]"
-            >
-              <BookMarked className="size-3.5" />
-              Revisão
-              <Badge variant="secondary" className="ml-0.5 border-0 bg-muted px-1.5 py-0 text-[10px] font-medium text-muted-foreground shadow-none">
-                {reviewFlashcards.length}
-              </Badge>
-            </Button>
+            <div className="flex items-center gap-0.5">
+              <Button
+                variant="ghost"
+                size="sm"
+                onClick={() => { setIsReviewFolderSelected(true); setSelectedFolderId(null) }}
+                data-active={isReviewFolderSelected}
+                className="ghost-filter h-8 gap-1.5 px-3 text-[13px]"
+              >
+                <BookMarked className="size-3.5" />
+                Revisão
+                <Badge variant="secondary" className="ml-0.5 border-0 bg-muted px-1.5 py-0 text-[10px] font-medium text-muted-foreground shadow-none">
+                  {reviewFlashcards.length}
+                </Badge>
+              </Button>
+
+              <DropdownMenu>
+                <DropdownMenuTrigger asChild>
+                  <Button
+                    variant="ghost"
+                    size="icon-sm"
+                    className="ghost-filter size-7 opacity-40 hover:opacity-100"
+                    title="Ações da Revisão"
+                  >
+                    <MoreVertical className="size-3" />
+                  </Button>
+                </DropdownMenuTrigger>
+                <DropdownMenuContent align="end">
+                  <AlertDialog>
+                    <AlertDialogTrigger asChild>
+                      <DropdownMenuItem
+                        onSelect={(e) => e.preventDefault()}
+                        className="text-destructive focus:text-destructive gap-2"
+                      >
+                        <Trash2 className="size-4" />
+                        Limpar Revisão
+                      </DropdownMenuItem>
+                    </AlertDialogTrigger>
+                    <AlertDialogContent>
+                      <AlertDialogHeader>
+                        <AlertDialogTitle>Limpar Pasta Revisão?</AlertDialogTitle>
+                        <AlertDialogDescription>
+                          Isso removerá todas as palavras da pasta Revisão, sem excluir os flashcards principais.
+                        </AlertDialogDescription>
+                      </AlertDialogHeader>
+                      <AlertDialogFooter>
+                        <AlertDialogCancel>Cancelar</AlertDialogCancel>
+                        <AlertDialogAction
+                          className="bg-destructive hover:bg-destructive/90"
+                          onClick={handleClearReviewFolder}
+                        >
+                          Limpar
+                        </AlertDialogAction>
+                      </AlertDialogFooter>
+                    </AlertDialogContent>
+                  </AlertDialog>
+                </DropdownMenuContent>
+              </DropdownMenu>
+            </div>
           )}
 
           {folders.map((folder) => (

@@ -1,10 +1,11 @@
 "use client"
 
 import { useState, useRef, useEffect, useCallback } from "react"
-import { X, Pencil, Trophy, RotateCw, CheckCircle2, XCircle } from "lucide-react"
+import { X, Pencil, Trophy, RotateCw, CheckCircle2, XCircle, Rotate3D, Languages, Volume2 } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
 import { cn } from "@/lib/utils"
+import { useAnimations } from "@/hooks/use-animations"
 import type { Flashcard, PartOfSpeech } from "@/lib/types"
 
 const partOfSpeechLabels: Record<PartOfSpeech, string> = {
@@ -40,6 +41,7 @@ interface WritingModeProps {
 type Stage = "rate" | "write" | "correct" | "wrong"
 
 export function WritingMode({ flashcards, onExit, onRemoveFromReview }: WritingModeProps) {
+  const { enabled: animationsEnabled } = useAnimations()
   const totalCards = flashcards.length
   const [queue, setQueue] = useState<Flashcard[]>(() => [...flashcards])
   const [inputValue, setInputValue] = useState("")
@@ -50,22 +52,34 @@ export function WritingMode({ flashcards, onExit, onRemoveFromReview }: WritingM
   const [isFinished, setIsFinished] = useState(false)
   const [removedIds, setRemovedIds] = useState<Set<string>>(new Set())
   const [failedIds, setFailedIds] = useState<Set<string>>(new Set())
+  const [isFlipped, setIsFlipped] = useState(false)
+  const [showExampleTranslation, setShowExampleTranslation] = useState(false)
   const inputRef = useRef<HTMLInputElement>(null)
 
   const current = queue[0]
   const needsMandatoryWrite = Boolean(current && failedIds.has(current.id))
 
   useEffect(() => {
+    if (!current) return
     setInputValue("")
-    setStage("rate")
+    setStage(failedIds.has(current.id) ? "write" : "rate")
+    setIsFlipped(false)
+    setShowExampleTranslation(false)
   }, [current?.id])
 
   useEffect(() => {
     if (stage === "write") {
+      setIsFlipped(true)
       const t = setTimeout(() => inputRef.current?.focus(), 80)
       return () => clearTimeout(t)
     }
   }, [stage, current?.id])
+
+  const speak = (text: string) => {
+    const utterance = new SpeechSynthesisUtterance(text)
+    utterance.lang = "en-US"
+    speechSynthesis.speak(utterance)
+  }
 
   const completeCurrentCard = useCallback(() => {
     setQueue((prev) => {
@@ -99,28 +113,22 @@ export function WritingMode({ flashcards, onExit, onRemoveFromReview }: WritingM
   const handleRate = useCallback(
     async (knew: boolean) => {
       if (!current || stage !== "rate") return
+      setIsFlipped(false)
 
-      if (!needsMandatoryWrite) {
-        if (knew) {
-          setSessionCorrect((prev) => prev + 1)
-          setStage("correct")
-          await markAsLearned(current.id)
-          setTimeout(() => completeCurrentCard(), 650)
-          return
-        }
-
-        setSessionWrong((prev) => prev + 1)
-        setFailedIds((prev) => new Set([...prev, current.id]))
-        setStage("wrong")
-        setTimeout(() => rotateCurrentToEnd(), 750)
+      if (knew) {
+        setSessionCorrect((prev) => prev + 1)
+        setStage("correct")
+        await markAsLearned(current.id)
+        completeCurrentCard()
         return
       }
 
-      // If the card was already missed in this session, rating comes first,
-      // but writing is always mandatory right after.
-      setStage("write")
+      setSessionWrong((prev) => prev + 1)
+      setFailedIds((prev) => new Set([...prev, current.id]))
+      setStage("wrong")
+      rotateCurrentToEnd()
     },
-    [current, stage, needsMandatoryWrite, markAsLearned, completeCurrentCard, rotateCurrentToEnd]
+    [current, stage, markAsLearned, completeCurrentCard, rotateCurrentToEnd]
   )
 
   const handleVerifyWriting = useCallback(async () => {
@@ -134,14 +142,14 @@ export function WritingMode({ flashcards, onExit, onRemoveFromReview }: WritingM
       setSessionCorrect((prev) => prev + 1)
       setStage("correct")
       await markAsLearned(current.id)
-      setTimeout(() => completeCurrentCard(), 650)
+      completeCurrentCard()
       return
     }
 
     setSessionWrong((prev) => prev + 1)
     setStage("wrong")
     setInputValue("")
-    setTimeout(() => rotateCurrentToEnd(), 900)
+    rotateCurrentToEnd()
   }, [current, stage, inputValue, markAsLearned, completeCurrentCard, rotateCurrentToEnd])
 
   const restart = () => {
@@ -220,6 +228,7 @@ export function WritingMode({ flashcards, onExit, onRemoveFromReview }: WritingM
   if (!current) return null
 
   const progress = (doneCount / totalCards) * 100
+  const remaining = queue.length
 
   return (
     <div className="fixed inset-0 z-50 flex flex-col bg-background dark:bg-slate-900">
@@ -239,7 +248,7 @@ export function WritingMode({ flashcards, onExit, onRemoveFromReview }: WritingM
               Escrita Obrigatória
             </p>
             <p className="text-xs text-muted-foreground dark:text-white/50">
-              {doneCount} de {totalCards} concluídos
+              {remaining} restante{remaining !== 1 ? "s" : ""}
             </p>
           </div>
         </div>
@@ -247,7 +256,7 @@ export function WritingMode({ flashcards, onExit, onRemoveFromReview }: WritingM
         <div className="mx-2 flex-1 sm:mx-8">
           <div className="h-1.5 bg-muted dark:bg-white/10 rounded-full overflow-hidden">
             <div
-              className="h-full bg-success rounded-full transition-all duration-500"
+              className={cn("h-full bg-success rounded-full transition-all", animationsEnabled ? "duration-500" : "duration-0")}
               style={{ width: `${progress}%` }}
             />
           </div>
@@ -258,76 +267,170 @@ export function WritingMode({ flashcards, onExit, onRemoveFromReview }: WritingM
         </span>
       </div>
 
-      <div className="flex flex-1 items-center justify-center bg-muted/20 p-3 pb-[calc(env(safe-area-inset-bottom)+0.75rem)] sm:p-6">
-        <div className="w-full max-w-xl space-y-4 sm:space-y-6">
-          <div className="surface-card surface-card-elevated space-y-4 p-4 sm:p-6">
-            <div className="flex items-center gap-2">
-              <Badge
-                className={cn(
-                  "text-xs font-medium border-0",
-                  partOfSpeechColors[current.partOfSpeech || "noun"]
-                )}
-              >
-                {partOfSpeechLabels[current.partOfSpeech || "noun"]}
-              </Badge>
-            </div>
-            <p className="text-3xl font-medium leading-tight text-foreground sm:text-4xl">{current.translation}</p>
-            {current.usageNote && (
-              <div className="bg-muted/30 rounded-xl p-3">
-                <span className="text-xs font-bold text-muted-foreground uppercase tracking-widest">Contexto</span>
-                <p className="text-sm text-foreground mt-1 leading-relaxed">{current.usageNote}</p>
-              </div>
+      <div className="flex flex-1 items-center justify-center bg-slate-50 p-3 pb-[calc(env(safe-area-inset-bottom)+0.75rem)] dark:bg-slate-950/50 sm:p-6">
+        <div className="w-full max-w-xl">
+          <div
+            className={cn(
+              "w-full max-w-xl transform-gpu will-change-transform transition-all",
+              animationsEnabled ? "duration-200" : "duration-0"
             )}
+          >
+            <div
+              className="perspective-1000 h-[62vh] min-h-[360px] max-h-[450px] cursor-pointer select-none sm:h-[450px]"
+              onClick={() => {
+                if (stage === "write") return
+                setIsFlipped((f) => !f)
+              }}
+            >
+            <div
+              className={cn(
+                "relative h-full w-full transform-gpu will-change-transform transform-style-3d rounded-2xl transition-transform",
+                animationsEnabled ? "duration-500" : "duration-0",
+                isFlipped && "rotate-y-180"
+              )}
+            >
+              <div
+                className="surface-card surface-card-elevated interactive-lift absolute inset-0 flex flex-col rounded-[22px] bg-card p-5 backface-hidden sm:rounded-[26px] sm:p-8"
+              >
+                <div className="flex items-center justify-between">
+                  <div className="flex gap-2 items-center">
+                    <Badge
+                      className={cn(
+                        "text-xs font-medium border-0",
+                        partOfSpeechColors[current.partOfSpeech || "noun"]
+                      )}
+                    >
+                      {partOfSpeechLabels[current.partOfSpeech || "noun"]}
+                    </Badge>
+                    {current.verbType && (
+                      <Badge variant="outline" className="ghost-tag border-0 bg-primary/10 text-[10px] uppercase tracking-wider text-primary">
+                        {current.verbType}
+                      </Badge>
+                    )}
+                  </div>
+                  <Button
+                    variant="ghost"
+                    size="icon"
+                    className="size-8 text-muted-foreground hover:text-foreground"
+                    disabled={stage === "write"}
+                    onClick={(e) => {
+                      e.stopPropagation()
+                      if (stage === "write") return
+                      setIsFlipped((v) => !v)
+                    }}
+                  >
+                    <Rotate3D className="size-4" />
+                  </Button>
+                </div>
+
+                <div className="flex-1 flex flex-col items-center justify-center space-y-4">
+                  <h2 className="text-center text-4xl font-medium tracking-tight text-foreground sm:text-6xl">
+                    {current.word}
+                  </h2>
+                </div>
+
+                {stage !== "write" && <Rotate3D className="minimal-rotate-hint size-4 text-muted-foreground" />}
+              </div>
+
+              <div
+                className="surface-card surface-card-elevated interactive-lift absolute inset-0 flex flex-col overflow-hidden rounded-[22px] bg-card p-5 backface-hidden rotate-y-180 sm:rounded-[26px] sm:p-8"
+              >
+                <div className="flex items-center justify-between mb-4">
+                  <div className="flex gap-2 items-center">
+                    <Badge
+                      className={cn(
+                        "text-xs font-medium border-0",
+                        partOfSpeechColors[current.partOfSpeech || "noun"]
+                      )}
+                    >
+                      {partOfSpeechLabels[current.partOfSpeech || "noun"]}
+                    </Badge>
+                    {current.verbType && (
+                      <Badge variant="outline" className="ghost-tag border-0 bg-primary/10 text-[10px] uppercase tracking-wider text-primary">
+                        {current.verbType}
+                      </Badge>
+                    )}
+                  </div>
+                  <Button
+                    variant="ghost"
+                    size="icon"
+                    className="size-8 text-muted-foreground hover:text-foreground"
+                    onClick={(e) => {
+                      e.stopPropagation()
+                      speak(current.word)
+                    }}
+                  >
+                    <Volume2 className="size-4" />
+                  </Button>
+                </div>
+
+                <div className="flex-1 space-y-5 overflow-y-auto pr-1 scrollbar-hide sm:space-y-6">
+                  <p className="border-b border-border/50 pb-2 text-2xl font-medium text-foreground sm:text-4xl">
+                    {current.translation}
+                  </p>
+
+                  {current.example && (
+                    <div>
+                      <span className="text-xs font-bold text-muted-foreground uppercase tracking-widest">Exemplo</span>
+                      <p className="text-base text-foreground italic mt-2 leading-relaxed">&ldquo;{current.example}&rdquo;</p>
+                      {current.exampleTranslation && (
+                        <div className="mt-2">
+                          <button
+                            className="inline-flex items-center gap-1.5 text-xs font-medium text-primary/70 hover:text-primary transition-colors"
+                            onClick={(e) => { e.stopPropagation(); setShowExampleTranslation((v) => !v) }}
+                          >
+                            <Languages className="size-3.5" />
+                            {showExampleTranslation ? "Ocultar tradução" : "Traduzir frase"}
+                          </button>
+                          {showExampleTranslation && (
+                            <p className="text-sm text-muted-foreground mt-1 leading-relaxed">{current.exampleTranslation}</p>
+                          )}
+                        </div>
+                      )}
+                    </div>
+                  )}
+
+                  {stage !== "write" && current.usageNote && (
+                    <div className="bg-muted/30 rounded-xl p-4">
+                      <span className="text-xs font-bold text-muted-foreground uppercase tracking-widest">Contexto</span>
+                      <p className="text-sm text-foreground mt-2 leading-relaxed">{current.usageNote}</p>
+                    </div>
+                  )}
+
+                  {stage === "write" && (
+                    <div className="rounded-xl border border-primary/20 bg-primary/5 p-3">
+                      <p className="text-sm font-semibold text-primary">Agora escreva a palavra em inglês.</p>
+                    </div>
+                  )}
+                </div>
+
+                <Rotate3D className="minimal-rotate-hint size-4 text-muted-foreground" />
+              </div>
+            </div>
+          </div>
           </div>
 
-          {stage === "wrong" && (
-            <div className="bg-destructive/10 border border-destructive/30 rounded-xl p-4 flex items-start gap-3">
-              <XCircle className="size-5 text-destructive shrink-0 mt-0.5" />
-              <div>
-                <p className="text-sm font-bold text-destructive">Resposta incorreta!</p>
-                <p className="text-sm text-foreground mt-1">
-                  Resposta correta: <span className="font-bold">{current.word}</span>
-                </p>
-              </div>
-            </div>
-          )}
-
-          {stage === "correct" && (
-            <div className="bg-success/10 border border-success/30 rounded-xl p-4 flex items-center gap-3">
-              <CheckCircle2 className="size-5 text-success" />
-              <div>
-                <p className="text-sm font-bold text-success">Correto!</p>
-                <p className="text-sm font-medium text-foreground">{current.word}</p>
-              </div>
-            </div>
-          )}
-
-          {stage === "rate" && (
-            <div className="space-y-3">
-              <p className="text-sm text-muted-foreground text-center">
-                {needsMandatoryWrite
-                  ? "Esta palavra já foi errada. Marque Acertei/Errei e escreva em inglês em seguida."
-                  : "Avalie se você acertaria esta palavra agora."}
-              </p>
-              <div className="grid grid-cols-2 gap-3">
+          {(stage === "rate" || stage === "correct" || stage === "wrong") && (
+            <div className="mt-5 flex gap-3 sm:mt-8 sm:gap-4">
                 <Button
                   size="lg"
                   variant="outline"
-                  className="h-12 border-destructive/20 text-base font-bold text-destructive hover:bg-destructive/10"
+                  className="h-12 flex-1 border-destructive/20 text-base font-bold text-destructive hover:bg-destructive/10 sm:h-16 sm:text-lg"
                   onClick={() => void handleRate(false)}
+                  disabled={stage !== "rate"}
                 >
-                  <XCircle className="size-5 mr-2" />
+                  <XCircle className="size-6 mr-2" />
                   Errei
                 </Button>
                 <Button
                   size="lg"
-                  className="h-12 bg-success text-base font-bold text-white hover:bg-success/90"
+                  className="h-12 flex-1 bg-success text-base font-bold text-white hover:bg-success/90 sm:h-16 sm:text-lg"
                   onClick={() => void handleRate(true)}
+                  disabled={stage !== "rate"}
                 >
-                  <CheckCircle2 className="size-5 mr-2" />
+                  <CheckCircle2 className="size-6 mr-2" />
                   Acertei
                 </Button>
-              </div>
             </div>
           )}
 
