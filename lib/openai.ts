@@ -1536,23 +1536,93 @@ function normalizeRevisionResponse(
   }
 }
 
-function parseJsonContent<T>(raw: string): T {
+function tryParseJson<T>(value: string): T | null {
   try {
-    return JSON.parse(raw) as T
+    return JSON.parse(value) as T
   } catch {
-    const fenced = raw.match(/```json\s*([\s\S]*?)\s*```/i)
-    if (fenced?.[1]) {
-      return JSON.parse(fenced[1]) as T
-    }
-
-    const firstBrace = raw.indexOf("{")
-    const lastBrace = raw.lastIndexOf("}")
-    if (firstBrace !== -1 && lastBrace > firstBrace) {
-      return JSON.parse(raw.slice(firstBrace, lastBrace + 1)) as T
-    }
-
-    throw new Error("Resposta da IA não veio em JSON válido.")
+    return null
   }
+}
+
+function extractBalancedJsonValue(raw: string, startIndex: number): string | null {
+  const startChar = raw[startIndex]
+  if (startChar !== "{" && startChar !== "[") return null
+
+  const stack: string[] = []
+  let inString = false
+  let escaped = false
+
+  for (let i = startIndex; i < raw.length; i++) {
+    const ch = raw[i]
+
+    if (inString) {
+      if (escaped) {
+        escaped = false
+        continue
+      }
+      if (ch === "\\") {
+        escaped = true
+        continue
+      }
+      if (ch === '"') {
+        inString = false
+      }
+      continue
+    }
+
+    if (ch === '"') {
+      inString = true
+      continue
+    }
+
+    if (ch === "{") {
+      stack.push("}")
+      continue
+    }
+
+    if (ch === "[") {
+      stack.push("]")
+      continue
+    }
+
+    if (ch === "}" || ch === "]") {
+      const expected = stack[stack.length - 1]
+      if (expected !== ch) return null
+      stack.pop()
+      if (stack.length === 0) {
+        return raw.slice(startIndex, i + 1)
+      }
+    }
+  }
+
+  return null
+}
+
+function parseJsonContent<T>(raw: string): T {
+  const normalized = raw.replace(/^\uFEFF/, "").trim()
+
+  const direct = tryParseJson<T>(normalized)
+  if (direct !== null) return direct
+
+  const fencedBlocks = normalized.matchAll(/```(?:json)?\s*([\s\S]*?)\s*```/gi)
+  for (const match of fencedBlocks) {
+    const block = (match[1] ?? "").trim()
+    if (!block) continue
+    const parsed = tryParseJson<T>(block)
+    if (parsed !== null) return parsed
+  }
+
+  for (let i = 0; i < normalized.length; i++) {
+    const ch = normalized[i]
+    if (ch !== "{" && ch !== "[") continue
+    const candidate = extractBalancedJsonValue(normalized, i)
+    if (!candidate) continue
+    const parsed = tryParseJson<T>(candidate)
+    if (parsed !== null) return parsed
+  }
+
+  const preview = normalized.slice(0, 240).replace(/\s+/g, " ")
+  throw new Error(`Resposta da IA não veio em JSON válido. Preview: ${preview}`)
 }
 
 async function callOpenRouter<T>(
