@@ -6,9 +6,18 @@ import { cn } from "@/lib/utils"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
 import { useGrammarProgress } from "@/hooks/use-grammar-progress"
-import type { Flashcard, ClassifiedWord, PartOfSpeech } from "@/lib/types"
+import type { Flashcard, PartOfSpeech } from "@/lib/types"
 import { useAnimations } from "@/hooks/use-animations"
 import { useAiPreferences } from "@/hooks/use-ai-preferences"
+
+function shuffleFlashcards(cards: Flashcard[]): Flashcard[] {
+  const next = [...cards]
+  for (let i = next.length - 1; i > 0; i--) {
+    const j = Math.floor(Math.random() * (i + 1))
+    ;[next[i], next[j]] = [next[j], next[i]]
+  }
+  return next
+}
 
 const partOfSpeechLabels: Record<PartOfSpeech, string> = {
   verb: "Verbo",
@@ -43,72 +52,31 @@ interface StudyModeProps {
 
 type StudyState = "studying" | "finished"
 
-function ClassifiedWordList({ words, label, maxCount }: { words: ClassifiedWord[]; label: string; maxCount: number }) {
-  if (!words || words.length === 0) return null
-  if (maxCount <= 0) return null
-
-  const visible = words.slice(0, maxCount)
-  if (visible.length === 0) return null
-  return (
-    <div className="space-y-1.5">
-      <span className="text-[10px] font-bold text-muted-foreground dark:text-white/40 uppercase tracking-widest">{label}</span>
-      <div className="flex flex-wrap gap-1.5">
-        {visible.map((item, idx) => {
-          const t = item.type === "abstract" ? "figurative" : item.type
-          const tag = t === "literal" ? "lit" : t === "slang" ? "slng" : "fig"
-          const tone =
-            t === "literal"
-              ? "bg-blue-500/10 text-blue-700 dark:bg-blue-500/30 dark:text-blue-100"
-              : t === "slang"
-                ? "bg-amber-500/10 text-amber-800 dark:bg-amber-500/30 dark:text-amber-100"
-                : "bg-purple-500/10 text-purple-700 dark:bg-purple-500/30 dark:text-purple-100"
-          return (
-            <Badge key={idx} className={cn("ghost-tag text-xs font-medium border-0 py-0.5 px-2", tone)}>
-              {item.word}
-              <span className="ml-1 opacity-50 text-[9px] font-normal">
-                ({tag})
-              </span>
-            </Badge>
-          )
-        })}
-      </div>
-    </div>
-  )
-}
-
 export function StudyMode({ flashcards, folderName, onExit, onMarkForReview }: StudyModeProps) {
   const { saveStudySession } = useGrammarProgress()
   const { enabled: animationsEnabled } = useAnimations()
-  const { synonymsLevel, includeConjugations, includeAlternativeForms, includeUsageNote } = useAiPreferences()
+  const { includeUsageNote } = useAiPreferences()
   
   // queue: palavras restantes. wrong: palavras erradas que voltam ao final
-  const [queue, setQueue] = useState<Flashcard[]>(() => [...flashcards])
+  const [queue, setQueue] = useState<Flashcard[]>(() => shuffleFlashcards(flashcards))
   const [wrongCount, setWrongCount] = useState<Record<string, number>>({})
   const [knownIds, setKnownIds] = useState<Set<string>>(new Set())
   const [correctFirstTryIds, setCorrectFirstTryIds] = useState<Set<string>>(new Set())
   const [isFlipped, setIsFlipped] = useState(false)
-  const [showConjugations, setShowConjugations] = useState(false)
   const [showExampleTranslation, setShowExampleTranslation] = useState(false)
   const [studyState, setStudyState] = useState<StudyState>("studying")
   const [animating, setAnimating] = useState(false)
   const [direction, setDirection] = useState<"left" | "right" | null>(null)
   const [sessionSaved, setSessionSaved] = useState(false)
   const [reviewedWords, setReviewedWords] = useState<Set<string>>(new Set())
+  const transitionMs = animationsEnabled ? 180 : 0
 
   const current = queue[0]
-  const currentPartOfSpeech = current?.partOfSpeech || "noun"
-  const alternativeForms =
-    includeAlternativeForms && current
-      ? (current.alternativeForms || []).filter(
-          (f) => f.translation && f.partOfSpeech && f.partOfSpeech !== currentPartOfSpeech
-        )
-      : []
   const remaining = queue.length
   const totalKnown = knownIds.size
   const totalCards = flashcards.length
 
   useEffect(() => {
-    setShowConjugations(false)
     setShowExampleTranslation(false)
   }, [current?.id])
 
@@ -144,7 +112,7 @@ export function StudyMode({ flashcards, folderName, onExit, onMarkForReview }: S
       setDirection(dir)
       setAnimating(true)
 
-      setTimeout(() => {
+      window.setTimeout(() => {
         setQueue((prev) => {
           const [head, ...rest] = prev
           if (knew) {
@@ -178,13 +146,13 @@ export function StudyMode({ flashcards, folderName, onExit, onMarkForReview }: S
         setIsFlipped(false)
         setAnimating(false)
         setDirection(null)
-      }, animationsEnabled ? 350 : 50)
+      }, transitionMs)
     },
-    [animating, current, animationsEnabled, wrongCount, onMarkForReview]
+    [animating, current, transitionMs, wrongCount, onMarkForReview]
   )
 
   const restart = () => {
-    setQueue([...flashcards])
+    setQueue(shuffleFlashcards(flashcards))
     setWrongCount({})
     setKnownIds(new Set())
     setCorrectFirstTryIds(new Set())
@@ -334,8 +302,8 @@ export function StudyMode({ flashcards, folderName, onExit, onMarkForReview }: S
         {current && (
           <div
             className={cn(
-              "w-full max-w-xl transition-all",
-              animationsEnabled ? "duration-350" : "duration-0",
+              "w-full max-w-xl transform-gpu will-change-transform transition-all",
+              animationsEnabled ? "duration-200" : "duration-0",
               animating && direction === "right" && "translate-x-32 rotate-12 opacity-0",
               animating && direction === "left" && "-translate-x-32 -rotate-12 opacity-0"
             )}
@@ -347,8 +315,8 @@ export function StudyMode({ flashcards, folderName, onExit, onMarkForReview }: S
             >
               <div
                 className={cn(
-                  "relative h-full w-full transform-style-3d rounded-2xl transition-transform",
-                  animationsEnabled ? "duration-700" : "duration-0",
+                  "relative h-full w-full transform-gpu will-change-transform transform-style-3d rounded-2xl transition-transform",
+                  animationsEnabled ? "duration-500" : "duration-0",
                   isFlipped && "rotate-y-180"
                 )}
               >
@@ -415,26 +383,9 @@ export function StudyMode({ flashcards, folderName, onExit, onMarkForReview }: S
 
                   <div className="flex-1 space-y-5 overflow-y-auto pr-1 scrollbar-hide sm:space-y-6">
                     <p className="border-b border-border/50 pb-2 text-2xl font-medium text-foreground sm:text-4xl">{current.translation}</p>
-                    {includeUsageNote && !!current.usageNote && (
-                      <div className="bg-muted/30 rounded-xl p-4">
-                        <span className="text-xs font-bold text-muted-foreground uppercase tracking-widest">
-                          Contexto
-                        </span>
-                        <p className="text-sm text-foreground mt-2 leading-relaxed">
-                          {current.usageNote}
-                        </p>
-                      </div>
-                    )}
 
-                    <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 sm:gap-4">
-                      <ClassifiedWordList words={current.synonyms} label="Sinônimos" maxCount={synonymsLevel} />
-                      <ClassifiedWordList words={current.antonyms} label="Antônimos" maxCount={synonymsLevel} />
-                    </div>
-
-                    <div className="bg-muted/30 p-4 rounded-xl">
-                      <span className="text-xs font-bold text-muted-foreground uppercase tracking-widest">
-                        Exemplo
-                      </span>
+                    <div>
+                      <span className="text-xs font-bold text-muted-foreground uppercase tracking-widest">Exemplo</span>
                       <p className="text-base text-foreground italic mt-2 leading-relaxed">
                         &ldquo;{current.example}&rdquo;
                       </p>
@@ -456,82 +407,14 @@ export function StudyMode({ flashcards, folderName, onExit, onMarkForReview }: S
                       )}
                     </div>
 
-                    {alternativeForms.length > 0 && (
-                      <div className="pt-4 border-t border-border">
-                        <span className="text-[10px] font-bold text-muted-foreground dark:text-white/40 uppercase tracking-widest block mb-3">
-                          Outras formas
+                    {includeUsageNote && !!current.usageNote && (
+                      <div className="bg-muted/30 rounded-xl p-4">
+                        <span className="text-xs font-bold text-muted-foreground uppercase tracking-widest">
+                          Contexto
                         </span>
-                        <div className="space-y-2">
-                          {alternativeForms.map((form, idx) => (
-                            <div key={idx} className="bg-muted/20 rounded-xl p-3">
-                              <div className="flex items-center gap-2 mb-1">
-                                <Badge className={cn("text-[9px] font-medium uppercase tracking-tighter border-0", partOfSpeechColors[form.partOfSpeech])}>
-                                  {partOfSpeechLabels[form.partOfSpeech]}
-                                </Badge>
-                                <div className="flex flex-col leading-tight min-w-0">
-                                  <span className="text-sm font-medium text-foreground truncate">
-                                    {(form as any).word || ""}
-                                  </span>
-                                  <span className="text-[11px] text-muted-foreground truncate">
-                                    {form.translation}
-                                  </span>
-                                </div>
-                              </div>
-                              <p className="text-xs text-muted-foreground italic leading-relaxed">
-                                {form.example}
-                              </p>
-                            </div>
-                          ))}
-                        </div>
-                      </div>
-                    )}
-
-                    {includeConjugations && current.conjugations && (
-                      <div className="pt-4 border-t border-border">
-                        <div className="flex items-center justify-between mb-3">
-                          <span className="text-xs font-bold text-muted-foreground uppercase tracking-widest">
-                            Verb Tenses
-                          </span>
-                          <Button
-                            variant="ghost"
-                            size="sm"
-                            className="h-7 px-2 text-[10px] font-bold text-primary hover:bg-primary/10 hover:text-primary"
-                            onClick={(e) => {
-                              e.stopPropagation()
-                              setShowConjugations((v) => !v)
-                            }}
-                          >
-                            {showConjugations ? "Ocultar" : "Mostrar"}
-                          </Button>
-                        </div>
-                        {showConjugations && (
-                          <div className="grid grid-cols-1 gap-2 text-[11px] sm:grid-cols-2 sm:gap-3">
-                            <div className="flex flex-col bg-muted/20 p-2 rounded-lg">
-                              <span className="text-primary font-bold text-[9px] uppercase">Simple Present</span>
-                              <span className="text-foreground font-medium">{current.conjugations.simplePresent || "n/a"}</span>
-                            </div>
-                            <div className="flex flex-col bg-muted/20 p-2 rounded-lg">
-                              <span className="text-primary font-bold text-[9px] uppercase">Simple Past</span>
-                              <span className="text-foreground font-medium">{current.conjugations.simplePast || "n/a"}</span>
-                            </div>
-                            <div className="flex flex-col bg-muted/20 p-2 rounded-lg">
-                              <span className="text-primary font-bold text-[9px] uppercase">Pres. Continuous</span>
-                              <span className="text-foreground font-medium">{current.conjugations.presentContinuous || "n/a"}</span>
-                            </div>
-                            <div className="flex flex-col bg-muted/20 p-2 rounded-lg">
-                              <span className="text-primary font-bold text-[9px] uppercase">Past Continuous</span>
-                              <span className="text-foreground font-medium">{current.conjugations.pastContinuous || "n/a"}</span>
-                            </div>
-                            <div className="flex flex-col bg-muted/20 p-2 rounded-lg">
-                              <span className="text-primary font-bold text-[9px] uppercase">Present Perfect</span>
-                              <span className="text-foreground font-medium">{current.conjugations.presentPerfect || "n/a"}</span>
-                            </div>
-                            <div className="flex flex-col bg-muted/20 p-2 rounded-lg">
-                              <span className="text-primary font-bold text-[9px] uppercase">Past Perfect</span>
-                              <span className="text-foreground font-medium">{current.conjugations.pastPerfect || "n/a"}</span>
-                            </div>
-                          </div>
-                        )}
+                        <p className="text-sm text-foreground mt-2 leading-relaxed">
+                          {current.usageNote}
+                        </p>
                       </div>
                     )}
                   </div>

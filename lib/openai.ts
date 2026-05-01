@@ -171,12 +171,22 @@ function isLikelyPtBrAdverbialChunk(value: string): boolean {
     "um tanto",
     "moderadamente",
     "antes",
+    "entao",
+    "então",
+    "depois",
+    "naquela epoca",
+    "naquela época",
+    "naquele momento",
     "preferencialmente",
   ])
 
   if (exactAdverbials.has(chunk)) return true
 
   if (/^(de forma alguma|de modo algum|de jeito nenhum|ao menos|pelo menos|mais ou menos)$/.test(chunk)) {
+    return true
+  }
+
+  if (/^(naquela|naquele|nesse|neste)\s+(epoca|época|momento|ocasiao|ocasião|altura)$/.test(chunk)) {
     return true
   }
 
@@ -279,7 +289,7 @@ function isTranslationKindCompatibleWithPartOfSpeech(kind: string, partOfSpeech:
 
   // adjective (default): avoid obvious non-adjective chunks.
   if (partOfSpeech === "adjective") {
-    return kind === "adjective" || kind === "noun_or_phrase" || kind === "unknown"
+    return kind === "adjective" || kind === "unknown"
   }
 
   return true
@@ -901,6 +911,7 @@ function isLikelyCrossPosPolysemyWord(word: string): boolean {
     "sound",
     "even",
     "still",
+    "then",
   ])
 
   return commonCrossPos.has(normalized)
@@ -945,6 +956,23 @@ function getFallbackCrossPosAlternativeForms(mainWord: string, mainPartOfSpeech:
         partOfSpeech: "verb",
         translation: "jejuar",
         example: "Many people fast for religious reasons.",
+      },
+    ],
+    then: [
+      {
+        partOfSpeech: "adverb",
+        translation: "então / naquela época",
+        example: "Back then, life was simpler.",
+      },
+      {
+        partOfSpeech: "adjective",
+        translation: "daquela época",
+        example: "The then owner sold the company.",
+      },
+      {
+        partOfSpeech: "conjunction",
+        translation: "então / nesse caso",
+        example: "If you agree, then we can start.",
       },
     ],
   }
@@ -1276,10 +1304,12 @@ function shouldSuppressUsageAndExample(params: {
 function normalizeTranslationByLexicalGuards(
   word: string,
   translation: string,
-  _options?: { partOfSpeech?: string; includeMultipleTranslations?: boolean }
+  options?: { partOfSpeech?: string; includeMultipleTranslations?: boolean }
 ): string {
   const normalizedWord = normalizeInlineWhitespace(word).toLowerCase()
   let normalizedTranslation = normalizeTranslationText(translation)
+  const normalizedPartOfSpeech = normalizePartOfSpeech(options?.partOfSpeech)
+  const allowMultiple = Boolean(options?.includeMultipleTranslations)
 
   // Deterministic fix for a frequent nautical hallucination.
   if (normalizedWord === "portside") {
@@ -1312,6 +1342,19 @@ function normalizeTranslationByLexicalGuards(
     }
 
     return hasMultiple ? "raramente / quase nunca" : "raramente"
+  }
+
+  // Deterministic guardrails for a frequent cross-POS ambiguity.
+  if (normalizedWord === "then") {
+    if (normalizedPartOfSpeech === "adverb") {
+      return allowMultiple ? "então / naquela época" : "então"
+    }
+    if (normalizedPartOfSpeech === "adjective") {
+      return "daquela época"
+    }
+    if (normalizedPartOfSpeech === "conjunction") {
+      return allowMultiple ? "então / nesse caso" : "então"
+    }
   }
 
   return normalizedTranslation

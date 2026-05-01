@@ -1,7 +1,7 @@
 "use client"
 
 import { useEffect, useMemo, useState } from "react"
-import { BookOpen, Loader2, FolderPlus, Folder, FolderOpen, GraduationCap, TrendingUp, Target, Calendar, LayoutGrid, List, LayoutPanelTop, MoreVertical, Trash2, BookMarked, Pencil, Plus, BarChart2, X, Search } from "lucide-react"
+import { BookOpen, Loader2, FolderPlus, Folder, FolderOpen, GraduationCap, TrendingUp, Target, Calendar, LayoutGrid, List, LayoutPanelTop, MoreVertical, Trash2, BookMarked, Pencil, Plus, BarChart2, X, Search, Tag } from "lucide-react"
 import { useFlashcardsDB } from "@/hooks/use-flashcards-db"
 import { useGrammarProgress } from "@/hooks/use-grammar-progress"
 import { useGptModel } from "@/hooks/use-gpt-model"
@@ -24,7 +24,9 @@ import {
 import {
   DropdownMenu,
   DropdownMenuContent,
+  DropdownMenuLabel,
   DropdownMenuItem,
+  DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu"
 import {
@@ -46,10 +48,21 @@ import {
 } from "@/components/ui/alert-dialog"
 import { cn } from "@/lib/utils"
 import { toast } from "@/hooks/use-toast"
-import type { Flashcard } from "@/lib/types"
-import type { FlashcardAIResponse } from "@/lib/openai"
+import type { Flashcard, FlashcardAIResponse, PartOfSpeech } from "@/lib/types"
 
 const AI_SETTINGS_HINT_SEEN_KEY = "vocablab_ai_settings_hint_seen"
+
+const partOfSpeechLabels: Record<PartOfSpeech, string> = {
+  verb: "Verbo",
+  noun: "Substantivo",
+  adjective: "Adjetivo",
+  adverb: "Advérbio",
+  preposition: "Preposição",
+  conjunction: "Conjunção",
+  interjection: "Interjeição",
+  phrase: "Expressão",
+  acronym: "Sigla",
+}
 
 function normalizeForSearch(value: string) {
   return value
@@ -102,6 +115,7 @@ export function FlashcardsPage() {
   const [isStatsOpen, setIsStatsOpen] = useState(false)
   const [showAiSettingsHint, setShowAiSettingsHint] = useState(false)
   const [searchQuery, setSearchQuery] = useState("")
+  const [selectedTag, setSelectedTag] = useState<PartOfSpeech | "all">("all")
 
   useEffect(() => {
     const seen = localStorage.getItem(AI_SETTINGS_HINT_SEEN_KEY)
@@ -146,9 +160,13 @@ export function FlashcardsPage() {
   )
 
   const filteredFlashcards = useMemo(() => {
-    if (!normalizedSearch) return displayedFlashcards
+    const byTag = selectedTag === "all"
+      ? displayedFlashcards
+      : displayedFlashcards.filter((flashcard) => flashcard.partOfSpeech === selectedTag)
 
-    return displayedFlashcards.filter((flashcard) => {
+    if (!normalizedSearch) return byTag
+
+    return byTag.filter((flashcard) => {
       const haystack = [
         flashcard.word,
         flashcard.translation,
@@ -163,7 +181,7 @@ export function FlashcardsPage() {
 
       return normalizedHaystack.includes(normalizedSearch)
     })
-  }, [displayedFlashcards, normalizedSearch])
+  }, [displayedFlashcards, normalizedSearch, selectedTag])
 
   const createCardFromAlternative = async (base: Flashcard, form: Flashcard["alternativeForms"][number]) => {
     const inputWord = form.word || base.word
@@ -207,10 +225,10 @@ export function FlashcardsPage() {
         synonyms: data.synonyms,
         antonyms: data.antonyms,
         example: data.example,
-        exampleTranslation: (data as any).exampleTranslation || "",
+        exampleTranslation: data.exampleTranslation || "",
         alternativeForms: data.alternativeForms || [],
-        conjugations: data.conjugations,
-        verbType: data.verbType,
+        conjugations: data.conjugations ?? undefined,
+        verbType: data.verbType ?? undefined,
         falseCognate: data.falseCognate,
         folderId: null,
         createdAt: Date.now(),
@@ -604,9 +622,44 @@ export function FlashcardsPage() {
                 <Input
                   value={searchQuery}
                   onChange={(e) => setSearchQuery(e.target.value)}
-                  placeholder="Buscar por palavra"
+                  placeholder="Buscar por palavra, tradução ou contexto"
                   className="h-auto border-0 bg-transparent px-0 py-0 text-sm shadow-none focus-visible:ring-0"
                 />
+                <DropdownMenu>
+                  <DropdownMenuTrigger asChild>
+                    <Button
+                      type="button"
+                      variant="ghost"
+                      size="icon-sm"
+                      className={cn(
+                        "size-6 shrink-0 rounded-full",
+                        selectedTag !== "all" && "bg-primary/10 text-primary hover:bg-primary/15 hover:text-primary"
+                      )}
+                      title={selectedTag === "all" ? "Filtrar por tag" : `Filtrando: ${partOfSpeechLabels[selectedTag]}`}
+                    >
+                      <Tag className="size-3" />
+                    </Button>
+                  </DropdownMenuTrigger>
+                  <DropdownMenuContent align="end" className="min-w-44">
+                    <DropdownMenuLabel>Filtrar por tag</DropdownMenuLabel>
+                    <DropdownMenuSeparator />
+                    <DropdownMenuItem
+                      onClick={() => setSelectedTag("all")}
+                      className={cn(selectedTag === "all" && "text-primary")}
+                    >
+                      Todas
+                    </DropdownMenuItem>
+                    {(Object.keys(partOfSpeechLabels) as PartOfSpeech[]).map((part) => (
+                      <DropdownMenuItem
+                        key={part}
+                        onClick={() => setSelectedTag(part)}
+                        className={cn(selectedTag === part && "text-primary")}
+                      >
+                        {partOfSpeechLabels[part]}
+                      </DropdownMenuItem>
+                    ))}
+                  </DropdownMenuContent>
+                </DropdownMenu>
                 {searchQuery && (
                   <Button
                     type="button"
@@ -625,6 +678,7 @@ export function FlashcardsPage() {
                 <p className="text-[12px] text-muted-foreground/70">
                 {filteredFlashcards.length}{" "}
                 {filteredFlashcards.length === 1 ? "palavra" : "palavras"}
+                {selectedTag !== "all" ? ` · ${partOfSpeechLabels[selectedTag]}` : ""}
                 {isReviewFolderSelected
                   ? " para revisar"
                   : selectedFolder
@@ -671,7 +725,7 @@ export function FlashcardsPage() {
                 <Search className="mb-3 size-8 text-muted-foreground/50" />
                 <h3 className="text-base font-medium text-foreground">Nenhum card encontrado</h3>
                 <p className="mt-1 max-w-md text-sm text-muted-foreground">
-                  Tente buscar pela palavra em inglês, por uma tradução em português ou por outro termo relacionado.
+                  Tente buscar pela palavra em inglês, por uma tradução em português, por contexto ou ajuste o filtro de tag.
                 </p>
               </div>
             ) : (
