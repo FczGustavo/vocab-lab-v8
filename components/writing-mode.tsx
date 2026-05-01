@@ -37,31 +37,37 @@ interface WritingModeProps {
   onRemoveFromReview: (id: string) => Promise<boolean>
 }
 
-type FeedbackState = "idle" | "correct" | "wrong-first" | "wrong-auto"
+type Stage = "rate" | "write" | "correct" | "wrong"
 
 export function WritingMode({ flashcards, onExit, onRemoveFromReview }: WritingModeProps) {
   const totalCards = flashcards.length
   const [queue, setQueue] = useState<Flashcard[]>(() => [...flashcards])
   const [inputValue, setInputValue] = useState("")
-  const [feedbackState, setFeedbackState] = useState<FeedbackState>("idle")
-  const [attemptCount, setAttemptCount] = useState(0)
+  const [stage, setStage] = useState<Stage>("rate")
   const [sessionCorrect, setSessionCorrect] = useState(0)
   const [sessionWrong, setSessionWrong] = useState(0)
   const [doneCount, setDoneCount] = useState(0)
   const [isFinished, setIsFinished] = useState(false)
   const [removedIds, setRemovedIds] = useState<Set<string>>(new Set())
+  const [failedIds, setFailedIds] = useState<Set<string>>(new Set())
   const inputRef = useRef<HTMLInputElement>(null)
 
   const current = queue[0]
+  const needsMandatoryWrite = Boolean(current && failedIds.has(current.id))
 
   useEffect(() => {
-    if (feedbackState === "idle" || feedbackState === "wrong-first") {
+    setInputValue("")
+    setStage("rate")
+  }, [current?.id])
+
+  useEffect(() => {
+    if (stage === "write") {
       const t = setTimeout(() => inputRef.current?.focus(), 80)
       return () => clearTimeout(t)
     }
-  }, [current?.id, feedbackState])
+  }, [stage, current?.id])
 
-  const advanceCard = useCallback(() => {
+  const completeCurrentCard = useCallback(() => {
     setQueue((prev) => {
       const next = prev.slice(1)
       if (next.length === 0) setIsFinished(true)
@@ -69,52 +75,85 @@ export function WritingMode({ flashcards, onExit, onRemoveFromReview }: WritingM
     })
     setDoneCount((prev) => prev + 1)
     setInputValue("")
-    setFeedbackState("idle")
-    setAttemptCount(0)
+    setStage("rate")
   }, [])
 
-  const handleSubmit = useCallback(() => {
-    if (!current) return
-    if (feedbackState === "correct" || feedbackState === "wrong-auto") return
+  const rotateCurrentToEnd = useCallback(() => {
+    setQueue((prev) => {
+      if (prev.length <= 1) return prev
+      const [head, ...rest] = prev
+      return [...rest, head]
+    })
+    setInputValue("")
+    setStage("rate")
+  }, [])
+
+  const markAsLearned = useCallback(
+    async (cardId: string) => {
+      setRemovedIds((prev) => new Set([...prev, cardId]))
+      await onRemoveFromReview(cardId)
+    },
+    [onRemoveFromReview]
+  )
+
+  const handleRate = useCallback(
+    async (knew: boolean) => {
+      if (!current || stage !== "rate") return
+
+      if (!needsMandatoryWrite) {
+        if (knew) {
+          setSessionCorrect((prev) => prev + 1)
+          setStage("correct")
+          await markAsLearned(current.id)
+          setTimeout(() => completeCurrentCard(), 650)
+          return
+        }
+
+        setSessionWrong((prev) => prev + 1)
+        setFailedIds((prev) => new Set([...prev, current.id]))
+        setStage("wrong")
+        setTimeout(() => rotateCurrentToEnd(), 750)
+        return
+      }
+
+      // If the card was already missed in this session, rating comes first,
+      // but writing is always mandatory right after.
+      setStage("write")
+    },
+    [current, stage, needsMandatoryWrite, markAsLearned, completeCurrentCard, rotateCurrentToEnd]
+  )
+
+  const handleVerifyWriting = useCallback(async () => {
+    if (!current || stage !== "write") return
 
     const answer = inputValue.trim().toLowerCase()
     const expected = current.word.trim().toLowerCase()
+    if (!answer) return
 
     if (answer === expected) {
-      setFeedbackState("correct")
-      if (attemptCount === 0) {
-        setSessionCorrect((prev) => prev + 1)
-        setRemovedIds((prev) => new Set([...prev, current.id]))
-        onRemoveFromReview(current.id)
-        setTimeout(() => advanceCard(), 1500)
-      } else {
-        setTimeout(() => advanceCard(), 900)
-      }
-    } else {
-      const newCount = attemptCount + 1
-      setAttemptCount(newCount)
-
-      if (newCount >= 2) {
-        setFeedbackState("wrong-auto")
-        setSessionWrong((prev) => prev + 1)
-        setTimeout(() => advanceCard(), 2200)
-      } else {
-        setFeedbackState("wrong-first")
-        setInputValue("")
-      }
+      setSessionCorrect((prev) => prev + 1)
+      setStage("correct")
+      await markAsLearned(current.id)
+      setTimeout(() => completeCurrentCard(), 650)
+      return
     }
-  }, [current, feedbackState, inputValue, attemptCount, onRemoveFromReview, advanceCard])
+
+    setSessionWrong((prev) => prev + 1)
+    setStage("wrong")
+    setInputValue("")
+    setTimeout(() => rotateCurrentToEnd(), 900)
+  }, [current, stage, inputValue, markAsLearned, completeCurrentCard, rotateCurrentToEnd])
 
   const restart = () => {
     setQueue([...flashcards])
     setInputValue("")
-    setFeedbackState("idle")
-    setAttemptCount(0)
+    setStage("rate")
     setSessionCorrect(0)
     setSessionWrong(0)
     setDoneCount(0)
     setIsFinished(false)
     setRemovedIds(new Set())
+    setFailedIds(new Set())
   }
 
   if (isFinished) {
@@ -138,11 +177,11 @@ export function WritingMode({ flashcards, onExit, onRemoveFromReview }: WritingM
           <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 sm:gap-4">
             <div className="bg-slate-50 dark:bg-white/5 border border-slate-200 dark:border-white/10 rounded-2xl p-6">
               <div className="text-4xl font-black text-success">{sessionCorrect}</div>
-              <div className="text-xs font-bold text-slate-500 uppercase tracking-widest mt-1">Acertos na 1ª</div>
+              <div className="text-xs font-bold text-slate-500 uppercase tracking-widest mt-1">Acertos</div>
             </div>
             <div className="bg-slate-50 dark:bg-white/5 border border-slate-200 dark:border-white/10 rounded-2xl p-6">
               <div className="text-4xl font-black text-destructive">{sessionWrong}</div>
-              <div className="text-xs font-bold text-slate-500 uppercase tracking-widest mt-1">Com erro</div>
+              <div className="text-xs font-bold text-slate-500 uppercase tracking-widest mt-1">Erros</div>
             </div>
           </div>
 
@@ -184,7 +223,6 @@ export function WritingMode({ flashcards, onExit, onRemoveFromReview }: WritingM
 
   return (
     <div className="fixed inset-0 z-50 flex flex-col bg-background dark:bg-slate-900">
-      {/* Header */}
       <div className="flex items-center justify-between gap-2 border-b border-border px-3 py-3 dark:border-white/10 sm:px-6 sm:py-4">
         <div className="flex items-center gap-3">
           <Button
@@ -220,10 +258,8 @@ export function WritingMode({ flashcards, onExit, onRemoveFromReview }: WritingM
         </span>
       </div>
 
-      {/* Content */}
       <div className="flex flex-1 items-center justify-center bg-muted/20 p-3 pb-[calc(env(safe-area-inset-bottom)+0.75rem)] sm:p-6">
         <div className="w-full max-w-xl space-y-4 sm:space-y-6">
-          {/* Translation card */}
           <div className="surface-card surface-card-elevated space-y-4 p-4 sm:p-6">
             <div className="flex items-center gap-2">
               <Badge
@@ -244,29 +280,19 @@ export function WritingMode({ flashcards, onExit, onRemoveFromReview }: WritingM
             )}
           </div>
 
-          {/* Feedback: wrong */}
-          {(feedbackState === "wrong-first" || feedbackState === "wrong-auto") && (
+          {stage === "wrong" && (
             <div className="bg-destructive/10 border border-destructive/30 rounded-xl p-4 flex items-start gap-3">
               <XCircle className="size-5 text-destructive shrink-0 mt-0.5" />
               <div>
-                <p className="text-sm font-bold text-destructive">
-                  {feedbackState === "wrong-auto" ? "Resposta incorreta — avançando…" : "Resposta incorreta!"}
-                </p>
+                <p className="text-sm font-bold text-destructive">Resposta incorreta!</p>
                 <p className="text-sm text-foreground mt-1">
-                  Resposta correta:{" "}
-                  <span className="font-bold">{current.word}</span>
+                  Resposta correta: <span className="font-bold">{current.word}</span>
                 </p>
-                {feedbackState === "wrong-first" && (
-                  <p className="text-xs text-muted-foreground mt-1">
-                    Digite a resposta correta para continuar.
-                  </p>
-                )}
               </div>
             </div>
           )}
 
-          {/* Feedback: correct */}
-          {feedbackState === "correct" && (
+          {stage === "correct" && (
             <div className="bg-success/10 border border-success/30 rounded-xl p-4 flex items-center gap-3">
               <CheckCircle2 className="size-5 text-success" />
               <div>
@@ -276,45 +302,61 @@ export function WritingMode({ flashcards, onExit, onRemoveFromReview }: WritingM
             </div>
           )}
 
-          {/* Input area */}
-          <div className="space-y-3">
-            <input
-              ref={inputRef}
-              type="text"
-              placeholder="Digite em inglês..."
-              value={inputValue}
-              onChange={(e) => {
-                if (feedbackState === "idle" || feedbackState === "wrong-first") {
-                  setInputValue(e.target.value)
-                }
-              }}
-              onKeyDown={(e) => {
-                if (e.key === "Enter") handleSubmit()
-              }}
-              disabled={feedbackState === "correct" || feedbackState === "wrong-auto"}
-              className={cn(
-                "w-full rounded-full border bg-card px-5 py-3 text-center text-xl font-medium outline-none transition-colors sm:px-6 sm:py-4 sm:text-2xl",
-                "placeholder:text-muted-foreground/40 placeholder:font-normal placeholder:text-xl",
-                "disabled:cursor-not-allowed",
-                feedbackState === "idle" &&
-                  "border-border/50 focus:border-primary dark:border-white/10 dark:focus:border-primary",
-                feedbackState === "correct" && "border-success bg-success/5 text-success",
-                (feedbackState === "wrong-first" || feedbackState === "wrong-auto") &&
-                  "border-destructive/50 bg-destructive/5"
-              )}
-            />
-            <Button
-              className="h-12 w-full text-base font-bold sm:h-14 sm:text-lg"
-              onClick={handleSubmit}
-              disabled={
-                !inputValue.trim() ||
-                feedbackState === "correct" ||
-                feedbackState === "wrong-auto"
-              }
-            >
-              Verificar
-            </Button>
-          </div>
+          {stage === "rate" && (
+            <div className="space-y-3">
+              <p className="text-sm text-muted-foreground text-center">
+                {needsMandatoryWrite
+                  ? "Esta palavra já foi errada. Marque Acertei/Errei e escreva em inglês em seguida."
+                  : "Avalie se você acertaria esta palavra agora."}
+              </p>
+              <div className="grid grid-cols-2 gap-3">
+                <Button
+                  size="lg"
+                  variant="outline"
+                  className="h-12 border-destructive/20 text-base font-bold text-destructive hover:bg-destructive/10"
+                  onClick={() => void handleRate(false)}
+                >
+                  <XCircle className="size-5 mr-2" />
+                  Errei
+                </Button>
+                <Button
+                  size="lg"
+                  className="h-12 bg-success text-base font-bold text-white hover:bg-success/90"
+                  onClick={() => void handleRate(true)}
+                >
+                  <CheckCircle2 className="size-5 mr-2" />
+                  Acertei
+                </Button>
+              </div>
+            </div>
+          )}
+
+          {stage === "write" && (
+            <div className="space-y-3">
+              <input
+                ref={inputRef}
+                type="text"
+                placeholder="Digite em inglês..."
+                value={inputValue}
+                onChange={(e) => setInputValue(e.target.value)}
+                onKeyDown={(e) => {
+                  if (e.key === "Enter") void handleVerifyWriting()
+                }}
+                className={cn(
+                  "w-full rounded-full border bg-card px-5 py-3 text-center text-xl font-medium outline-none transition-colors sm:px-6 sm:py-4 sm:text-2xl",
+                  "placeholder:text-muted-foreground/40 placeholder:font-normal placeholder:text-xl",
+                  "border-border/50 focus:border-primary dark:border-white/10 dark:focus:border-primary"
+                )}
+              />
+              <Button
+                className="h-12 w-full text-base font-bold sm:h-14 sm:text-lg"
+                onClick={() => void handleVerifyWriting()}
+                disabled={!inputValue.trim()}
+              >
+                Verificar escrita
+              </Button>
+            </div>
+          )}
         </div>
       </div>
     </div>

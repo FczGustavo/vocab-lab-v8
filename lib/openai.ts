@@ -356,6 +356,42 @@ function normalizeTranslationByPartOfSpeech(
   return ranked.slice(0, 2).join(" / ")
 }
 
+function enforceTranslationPosPurity(
+  translation: string,
+  includeMultipleTranslations: boolean,
+  partOfSpeech: string
+): string {
+  const normalized = normalizeTranslationText(translation)
+  const chunks = normalized
+    .split("/")
+    .map((item) => normalizeInlineWhitespace(item))
+    .filter(Boolean)
+    .filter((item, index, arr) => arr.findIndex((x) => x.toLowerCase() === item.toLowerCase()) === index)
+
+  if (chunks.length === 0) return ""
+
+  const compatible = chunks.filter((chunk) => {
+    const kind = guessPtBrTranslationKind(chunk)
+    return isTranslationKindCompatibleWithPartOfSpeech(kind, partOfSpeech)
+  })
+
+  const pool = compatible.length > 0
+    ? compatible
+    : [...chunks]
+        .sort((a, b) => scoreTranslationChunkByPartOfSpeech(b, partOfSpeech) - scoreTranslationChunkByPartOfSpeech(a, partOfSpeech))
+        .slice(0, 1)
+
+  if (partOfSpeech === "acronym" || partOfSpeech === "phrase") {
+    return pool[0]
+  }
+
+  if (!includeMultipleTranslations) {
+    return pool[0]
+  }
+
+  return pool.slice(0, 2).join(" / ")
+}
+
 function scoreTranslationChunkByPartOfSpeech(chunk: string, partOfSpeech: string): number {
   const normalized = normalizeInlineWhitespace(chunk).toLowerCase()
   if (!normalized) return -100
@@ -911,7 +947,6 @@ function isLikelyCrossPosPolysemyWord(word: string): boolean {
     "sound",
     "even",
     "still",
-    "then",
   ])
 
   return commonCrossPos.has(normalized)
@@ -956,23 +991,6 @@ function getFallbackCrossPosAlternativeForms(mainWord: string, mainPartOfSpeech:
         partOfSpeech: "verb",
         translation: "jejuar",
         example: "Many people fast for religious reasons.",
-      },
-    ],
-    then: [
-      {
-        partOfSpeech: "adverb",
-        translation: "então / naquela época",
-        example: "Back then, life was simpler.",
-      },
-      {
-        partOfSpeech: "adjective",
-        translation: "daquela época",
-        example: "The then owner sold the company.",
-      },
-      {
-        partOfSpeech: "conjunction",
-        translation: "então / nesse caso",
-        example: "If you agree, then we can start.",
       },
     ],
   }
@@ -1308,8 +1326,7 @@ function normalizeTranslationByLexicalGuards(
 ): string {
   const normalizedWord = normalizeInlineWhitespace(word).toLowerCase()
   let normalizedTranslation = normalizeTranslationText(translation)
-  const normalizedPartOfSpeech = normalizePartOfSpeech(options?.partOfSpeech)
-  const allowMultiple = Boolean(options?.includeMultipleTranslations)
+  void options
 
   // Deterministic fix for a frequent nautical hallucination.
   if (normalizedWord === "portside") {
@@ -1342,19 +1359,6 @@ function normalizeTranslationByLexicalGuards(
     }
 
     return hasMultiple ? "raramente / quase nunca" : "raramente"
-  }
-
-  // Deterministic guardrails for a frequent cross-POS ambiguity.
-  if (normalizedWord === "then") {
-    if (normalizedPartOfSpeech === "adverb") {
-      return allowMultiple ? "então / naquela época" : "então"
-    }
-    if (normalizedPartOfSpeech === "adjective") {
-      return "daquela época"
-    }
-    if (normalizedPartOfSpeech === "conjunction") {
-      return allowMultiple ? "então / nesse caso" : "então"
-    }
   }
 
   return normalizedTranslation
@@ -1433,6 +1437,7 @@ function normalizeFlashcardResponse(
       includeMultipleTranslations: options.includeMultipleTranslations,
     })
   )
+  translation = enforceTranslationPosPurity(translation, options.includeMultipleTranslations, partOfSpeech)
 
   // Keep card tag aligned with the final translation class when model POS drifts.
   if (!targetPos) {
@@ -1450,6 +1455,7 @@ function normalizeFlashcardResponse(
           includeMultipleTranslations: options.includeMultipleTranslations,
         })
       )
+      translation = enforceTranslationPosPurity(translation, options.includeMultipleTranslations, partOfSpeech)
     }
   }
 
@@ -1533,10 +1539,15 @@ function normalizeRevisionResponse(
     partOfSpeech: normalizedPartOfSpeech,
     includeMultipleTranslations: normalizeTranslationText(raw?.translation).includes("/"),
   })
+  const purifiedTranslation = enforceTranslationPosPurity(
+    normalizedTranslation,
+    normalizeTranslationText(raw?.translation).includes("/"),
+    normalizedPartOfSpeech
+  )
   const translation = normalizePtBrOrthography(
     normalizedPartOfSpeech === "acronym" || normalizedPartOfSpeech === "phrase"
-      ? pickPrimaryTranslation(normalizedTranslation)
-      : normalizedTranslation
+      ? pickPrimaryTranslation(purifiedTranslation)
+      : purifiedTranslation
   )
   const usageNote = normalizeUsageNoteByPartOfSpeech(
     raw?.usageNote,
@@ -1784,6 +1795,7 @@ export interface FlashcardRevisionResponse {
 
 interface InternalReviewItem {
   rule:
+    | "pos_purity"
     | "zero_fluff_audit"
     | "consistency"
     | "translation_sync"
@@ -1881,6 +1893,7 @@ Be ULTRA CONCISE and DIRECT (flashcard style, 2–3 short sentences maximum).
     ? `STEP 2 — TRANSLATION (Brazilian Portuguese, 2009 Orthographic Agreement)
 Provide up to 2 EXACT and most common translations in Portuguese, separated by a slash (/).
 - GOLDEN RULE: The chosen translation(s) MUST make complete, natural sense when mentally substituted into the example sentence you generate in STEP 5.
+- POS PURITY LOCK: every translation chunk must match the chosen partOfSpeech. If a different sense belongs to another class, omit it from the main translation and keep it only as an alternative form.
 - PHRASE/ACRONYM OVERRIDE: if partOfSpeech is "phrase" or "acronym", always provide EXACTLY 1 translation (NO slash separators).
 - IDIOMATIC PHRASE RULE: If partOfSpeech is "phrase", translate the intended meaning in natural Brazilian Portuguese. Do NOT produce literal calques, broken commands, or word-by-word fragments. Example: "mind your own business" -> "cuide da sua vida", not "cada um no seu".
 - DO NOT over-simplify adverbs or nuanced expressions (e.g., do NOT translate "rather" as just "mais"; use full nuance forms like "em vez de / bastante" or "um tanto").
@@ -1896,6 +1909,7 @@ Provide up to 2 EXACT and most common translations in Portuguese, separated by a
     : `STEP 2 — TRANSLATION (Brazilian Portuguese, 2009 Orthographic Agreement)
 Provide EXACTLY 1 main translation in Portuguese (NO slash separators).
 - GOLDEN RULE: The chosen translation MUST make complete, natural sense when mentally substituted into the example sentence you generate in STEP 5.
+- POS PURITY LOCK: the translation must match only the chosen partOfSpeech. If the word has other-class senses, do not include them in the main translation.
 - IDIOMATIC PHRASE RULE: If partOfSpeech is "phrase", translate the intended meaning in natural Brazilian Portuguese. Do NOT produce literal calques, broken commands, or word-by-word fragments. Example: "mind your own business" -> "cuide da sua vida".
 - DO NOT over-simplify adverbs or nuanced expressions (e.g., do NOT translate "rather" as just "mais").
 - ADVERB PRECISION: keep the translation as adverbial function (not noun/verb/adjective). For "hardly", prefer "raramente" or "quase nunca".
@@ -1951,6 +1965,7 @@ Classify using EXACTLY one of: verb | noun | adjective | adverb | preposition | 
 - Use "acronym" only when the entry is an established abbreviation/sigla; do not force acronym for regular dictionary words.
 - If the input contains spaces, do NOT downgrade it to noun/adjective/etc. Keep it as "phrase".
 - The chosen partOfSpeech GOVERNS every other field — never contradict it.
+- POS PURITY LOCK (CRITICAL): once partOfSpeech is chosen, ALL main fields (translation, usageNote, example, synonyms, antonyms) must stay in that same grammatical function. Do NOT mix senses from other classes in the main card.
 - If the final partOfSpeech is "phrase" or "acronym", prefer one precise translation over multiple near-duplicates.
 
 ══════════════════════════════════════════
@@ -1968,6 +1983,7 @@ STEP 5 — EXAMPLE SENTENCE (American English)
 ══════════════════════════════════════════
 Write ONE natural American English sentence that clearly illustrates the EXACT meaning expressed by the translation in STEP 2.
 - The example MUST be semantically synchronized: if the translation represents usage X, the example must demonstrate usage X — not usage Y.
+- POS PURITY LOCK: the sentence must exemplify the selected partOfSpeech only; avoid structures that make the target word act as another class.
 - FUNCTIONAL ALIGNMENT TEST: after drafting the example, verify that replacing the English target with the Portuguese translation intent still yields a natural Portuguese meaning.
 - For modal-preference constructions (e.g., "would rather"), ensure the Portuguese intent is "preferir"/"em vez de" instead of literal fragments like "antes que".
 - MANDATORY: EVERY word, no matter how simple (e.g., "car", "apple", "blue"), MUST have an "example" and "exampleTranslation". NEVER leave them empty.
@@ -1991,15 +2007,16 @@ ${alternativeFormsInstruction}
 STEP 9 — MANDATORY SELF-REVIEW (complete before writing final JSON)
 ══════════════════════════════════════════
 Before outputting, you MUST fill a concise "_internalReview" object first, then correct issues in official fields:
-1. CONSISTENCY: Is "partOfSpeech" fully consistent with translation, usageNote, example, synonyms, and antonyms?
-2. TRANSLATION SYNC: Does the translation make natural sense when substituted into the example sentence, including idiom/modal patterns?
-3. SYNONYM ACCURACY: Do all synonyms/antonyms share EXACTLY the same POS and meaning context?
-4. ALTERNATIVE FORMS VALIDITY: Does every word in "alternativeForms" exist in official dictionaries?
-5. USAGE NOTE FORMATTING: Does "usageNote" contain NO markdown, NO line breaks, NO bullet points?
-6. PORTUGUESE ORTHOGRAPHY: Does all Portuguese text comply with the 2009 Agreement?
-7. ANTI-HALLUCINATION: Are you fully confident about every claim regarding this word's meaning?
-8. ZERO-FLUFF AUDIT: Is this a basic, everyday 1:1 vocabulary word (like 'car', 'blue', 'buy')? If YES, you MUST clear the "usageNote" field to "". Only keep notes for real learner traps.
-9. PHRASE NATURALNESS: If partOfSpeech is "phrase", is the Portuguese translation a real, natural equivalent rather than a literal calque or malformed fragment?
+1. POS PURITY: Are translation, usageNote, and example strictly in the selected partOfSpeech with no cross-class leakage?
+2. CONSISTENCY: Is "partOfSpeech" fully consistent with translation, usageNote, example, synonyms, and antonyms?
+3. TRANSLATION SYNC: Does the translation make natural sense when substituted into the example sentence, including idiom/modal patterns?
+4. SYNONYM ACCURACY: Do all synonyms/antonyms share EXACTLY the same POS and meaning context?
+5. ALTERNATIVE FORMS VALIDITY: Does every word in "alternativeForms" exist in official dictionaries?
+6. USAGE NOTE FORMATTING: Does "usageNote" contain NO markdown, NO line breaks, NO bullet points?
+7. PORTUGUESE ORTHOGRAPHY: Does all Portuguese text comply with the 2009 Agreement?
+8. ANTI-HALLUCINATION: Are you fully confident about every claim regarding this word's meaning?
+9. ZERO-FLUFF AUDIT: Is this a basic, everyday 1:1 vocabulary word (like 'car', 'blue', 'buy')? If YES, you MUST clear the "usageNote" field to "". Only keep notes for real learner traps.
+10. PHRASE NATURALNESS: If partOfSpeech is "phrase", is the Portuguese translation a real, natural equivalent rather than a literal calque or malformed fragment?
 
 Rules for "_internalReview":
 - Keep it SHORT and STRUCTURED only.
@@ -2016,6 +2033,7 @@ Return ONLY a valid JSON object. Do NOT wrap it in code blocks. Do NOT add comme
   "_internalReview": {
     "finalStatus": "pass|fail",
     "checks": [
+      {"rule": "pos_purity", "status": "pass|fail", "fixApplied": "removed cross-class meaning from main translation/example"},
       {"rule": "zero_fluff_audit", "status": "pass|fail", "fixApplied": "cleared usageNote because word is a basic 1:1 translation"},
       {"rule": "consistency", "status": "pass|fail", "fixApplied": "short note"},
       {"rule": "translation_sync", "status": "pass|fail", "fixApplied": "short note"},
@@ -2160,6 +2178,7 @@ Your task:
 - Keep the word and part of speech unchanged.
 - Update ALL fields to be fully consistent with the NEW translation.
 - The received partOfSpeech is mandatory. Do NOT mix other usages in the main context.
+- POS PURITY LOCK (CRITICAL): keep translation, usageNote, example, synonyms, and antonyms in the same received partOfSpeech; remove cross-class meanings from the main answer.
 - MANDATORY SYNC: The "example" sentence MUST perfectly align with the NEW translation. NEVER leave example fields empty.
 - If the received partOfSpeech is "phrase" or "acronym", translation MUST be a single form (NO slash separators).
 - If the received partOfSpeech is "phrase", prefer the most natural Brazilian Portuguese equivalent, not a literal or malformed calque.
@@ -2174,14 +2193,15 @@ ${contextPolicyInstruction}
 MANDATORY SELF-REVIEW (complete before outputting)
 ══════════════════════════════════════════
 Before outputting, you MUST fill a concise "_internalReview" object first, then correct issues in official fields:
-1. CONSISTENCY: Is every field (example, synonyms, usageNote) consistent with the NEW translation and the given partOfSpeech?
-2. TRANSLATION SYNC: Does the example sentence naturally illustrate the new translation, including idiom/modal patterns?
-3. SYNONYM ACCURACY: Do all synonyms/antonyms match the same POS and new meaning context?
-4. ALTERNATIVE FORMS VALIDITY: Does every word in "alternativeForms" exist in official dictionaries?
-5. USAGE NOTE FORMATTING: Is "usageNote" plain text with no markdown, no line breaks, no bullet points?
-6. PORTUGUESE ORTHOGRAPHY: Does all Portuguese text follow the 2009 agreement?
-7. ZERO-FLUFF AUDIT: Is this a basic, everyday 1:1 vocabulary word? If YES, you MUST clear the "usageNote" field to "".
-8. PHRASE NATURALNESS: If partOfSpeech is "phrase", is the Portuguese translation genuinely natural and idiomatic?
+1. POS PURITY: Are translation, usageNote, and example strictly in the received partOfSpeech with no cross-class leakage?
+2. CONSISTENCY: Is every field (example, synonyms, usageNote) consistent with the NEW translation and the given partOfSpeech?
+3. TRANSLATION SYNC: Does the example sentence naturally illustrate the new translation, including idiom/modal patterns?
+4. SYNONYM ACCURACY: Do all synonyms/antonyms match the same POS and new meaning context?
+5. ALTERNATIVE FORMS VALIDITY: Does every word in "alternativeForms" exist in official dictionaries?
+6. USAGE NOTE FORMATTING: Is "usageNote" plain text with no markdown, no line breaks, no bullet points?
+7. PORTUGUESE ORTHOGRAPHY: Does all Portuguese text follow the 2009 agreement?
+8. ZERO-FLUFF AUDIT: Is this a basic, everyday 1:1 vocabulary word? If YES, you MUST clear the "usageNote" field to "".
+9. PHRASE NATURALNESS: If partOfSpeech is "phrase", is the Portuguese translation genuinely natural and idiomatic?
 
 Rules for "_internalReview":
 - Keep it SHORT and STRUCTURED only.
@@ -2195,6 +2215,7 @@ Return the exact JSON:
   "_internalReview": {
     "finalStatus": "pass|fail",
     "checks": [
+      {"rule": "pos_purity", "status": "pass|fail", "fixApplied": "removed cross-class meaning from main translation/example"},
       {"rule": "zero_fluff_audit", "status": "pass|fail", "fixApplied": "short note"},
       {"rule": "consistency", "status": "pass|fail", "fixApplied": "short note"},
       {"rule": "translation_sync", "status": "pass|fail", "fixApplied": "short note"},
