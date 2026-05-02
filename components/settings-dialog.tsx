@@ -1,7 +1,7 @@
 "use client"
 
 import { useEffect, useMemo, useState } from "react"
-import { Settings, RotateCcw, BarChart3, Sun, Moon, Laptop, Sparkles, CloudUpload, CloudDownload, RefreshCcw, Loader2 } from "lucide-react"
+import { Settings, RotateCcw, BarChart3, Sun, Moon, Laptop, Sparkles, CloudUpload, CloudDownload, RefreshCcw, Loader2, Clock3 } from "lucide-react"
 import { useTheme } from "next-themes"
 import { Button } from "@/components/ui/button"
 import { Switch } from "@/components/ui/switch"
@@ -30,6 +30,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { useGrammarProgress } from "@/hooks/use-grammar-progress"
 import { useGptModel, AVAILABLE_MODELS } from "@/hooks/use-gpt-model"
 import { useAnimations } from "@/hooks/use-animations"
+import { useStudyTimer } from "@/hooks/use-study-timer"
 import { useAiPreferences } from "@/hooks/use-ai-preferences"
 import { useSyncCode } from "@/hooks/use-sync-code"
 import { useFlashcardsDB } from "@/hooks/use-flashcards-db"
@@ -44,6 +45,7 @@ export function SettingsDialog() {
   const { resetStats } = useGrammarProgress()
   const { theme, setTheme } = useTheme()
   const { enabled: animationsEnabled, setEnabled: setAnimationsEnabled } = useAnimations()
+  const { enabled: studyTimerEnabled, setEnabled: setStudyTimerEnabled } = useStudyTimer()
   const {
     synonymsLevel,
     setSynonymsLevel,
@@ -332,6 +334,21 @@ export function SettingsDialog() {
                       checked={animationsEnabled}
                       onCheckedChange={setAnimationsEnabled}
                     />
+                  </div>
+                </div>
+
+                <div className={cn("space-y-3 pt-4 border-t", activeTab !== "general" && "hidden")}>
+                  <div className="flex items-center justify-between">
+                    <div className="space-y-0.5">
+                      <h4 className="text-sm font-medium flex items-center gap-2">
+                        <Clock3 className="size-4 text-primary" />
+                        Cronômetro de Estudo
+                      </h4>
+                      <p className="text-[10px] text-muted-foreground">
+                        Mostra o tempo decorrido durante as sessões de estudo.
+                      </p>
+                    </div>
+                    <Switch checked={studyTimerEnabled} onCheckedChange={setStudyTimerEnabled} />
                   </div>
                 </div>
 

@@ -1,11 +1,12 @@
 "use client"
 
 import { useState, useRef, useEffect, useCallback } from "react"
-import { X, Pencil, Trophy, RotateCw, CheckCircle2, XCircle, Rotate3D, Languages, Volume2 } from "lucide-react"
+import { X, Pencil, Trophy, RotateCw, CheckCircle2, XCircle, Rotate3D, Languages, Volume2, Clock3 } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
 import { cn } from "@/lib/utils"
 import { useAnimations } from "@/hooks/use-animations"
+import { useStudyTimer } from "@/hooks/use-study-timer"
 import type { Flashcard, PartOfSpeech } from "@/lib/types"
 
 const partOfSpeechLabels: Record<PartOfSpeech, string> = {
@@ -40,8 +41,15 @@ interface WritingModeProps {
 
 type Stage = "rate" | "write" | "correct" | "wrong"
 
+function formatElapsedTime(totalSeconds: number) {
+  const minutes = Math.floor(totalSeconds / 60)
+  const seconds = totalSeconds % 60
+  return `${String(minutes).padStart(2, "0")}:${String(seconds).padStart(2, "0")}`
+}
+
 export function WritingMode({ flashcards, onExit, onRemoveFromReview }: WritingModeProps) {
   const { enabled: animationsEnabled } = useAnimations()
+  const { enabled: studyTimerEnabled } = useStudyTimer()
   const totalCards = flashcards.length
   const [queue, setQueue] = useState<Flashcard[]>(() => [...flashcards])
   const [inputValue, setInputValue] = useState("")
@@ -54,6 +62,8 @@ export function WritingMode({ flashcards, onExit, onRemoveFromReview }: WritingM
   const [failedIds, setFailedIds] = useState<Set<string>>(new Set())
   const [isFlipped, setIsFlipped] = useState(false)
   const [showExampleTranslation, setShowExampleTranslation] = useState(false)
+  const [elapsedSeconds, setElapsedSeconds] = useState(0)
+  const sessionStartedAtRef = useRef<number>(Date.now())
   const inputRef = useRef<HTMLInputElement>(null)
 
   const current = queue[0]
@@ -74,6 +84,19 @@ export function WritingMode({ flashcards, onExit, onRemoveFromReview }: WritingM
       return () => clearTimeout(t)
     }
   }, [stage, current?.id])
+
+  useEffect(() => {
+    if (!studyTimerEnabled || isFinished) return
+
+    const tick = () => {
+      const seconds = Math.floor((Date.now() - sessionStartedAtRef.current) / 1000)
+      setElapsedSeconds(Math.max(0, seconds))
+    }
+
+    tick()
+    const timerId = window.setInterval(tick, 1000)
+    return () => window.clearInterval(timerId)
+  }, [isFinished, studyTimerEnabled])
 
   const speak = (text: string) => {
     const utterance = new SpeechSynthesisUtterance(text)
@@ -162,35 +185,45 @@ export function WritingMode({ flashcards, onExit, onRemoveFromReview }: WritingM
     setIsFinished(false)
     setRemovedIds(new Set())
     setFailedIds(new Set())
+    sessionStartedAtRef.current = Date.now()
+    setElapsedSeconds(0)
   }
 
   if (isFinished) {
     const kept = totalCards - removedIds.size
     return (
-      <div className="fixed inset-0 z-50 flex flex-col items-center justify-center bg-background p-4 sm:p-6">
-        <div className="w-full max-w-md space-y-6 text-center sm:space-y-8">
-          <div className="size-24 rounded-full bg-primary/10 border border-primary/20 flex items-center justify-center mx-auto">
-            <Trophy className="size-12 text-primary" />
+      <div className="fixed inset-0 z-50 overflow-y-auto bg-background p-3 sm:p-5">
+        <div className="mx-auto w-full max-w-[720px] space-y-4 py-2 text-center sm:space-y-5">
+          <div className="size-16 rounded-full bg-primary/10 border border-primary/20 flex items-center justify-center mx-auto sm:size-20">
+            <Trophy className="size-8 text-primary sm:size-10" />
           </div>
 
           <div className="space-y-2">
-            <h2 className="text-3xl font-black uppercase tracking-tighter text-slate-900 dark:text-white sm:text-4xl">
+            <h2 className="text-2xl font-black uppercase tracking-tighter text-slate-900 dark:text-white sm:text-3xl">
               Revisão Concluída!
             </h2>
-            <p className="text-slate-500 dark:text-slate-400 font-medium">
+            <p className="text-sm text-slate-500 dark:text-slate-400 font-medium sm:text-base">
               Você praticou {totalCards} {totalCards === 1 ? "palavra" : "palavras"} por escrita
             </p>
           </div>
 
-          <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 sm:gap-4">
-            <div className="bg-slate-50 dark:bg-white/5 border border-slate-200 dark:border-white/10 rounded-2xl p-6">
-              <div className="text-4xl font-black text-success">{sessionCorrect}</div>
+          <div className={cn("grid grid-cols-1 gap-2 sm:gap-3", studyTimerEnabled ? "sm:grid-cols-3" : "sm:grid-cols-2")}>
+            <div className="bg-slate-50 dark:bg-white/5 border border-slate-200 dark:border-white/10 rounded-xl p-4 sm:p-5">
+              <div className="text-3xl font-black text-success sm:text-4xl">{sessionCorrect}</div>
               <div className="text-xs font-bold text-slate-500 uppercase tracking-widest mt-1">Acertos</div>
             </div>
-            <div className="bg-slate-50 dark:bg-white/5 border border-slate-200 dark:border-white/10 rounded-2xl p-6">
-              <div className="text-4xl font-black text-destructive">{sessionWrong}</div>
+            <div className="bg-slate-50 dark:bg-white/5 border border-slate-200 dark:border-white/10 rounded-xl p-4 sm:p-5">
+              <div className="text-3xl font-black text-destructive sm:text-4xl">{sessionWrong}</div>
               <div className="text-xs font-bold text-slate-500 uppercase tracking-widest mt-1">Erros</div>
             </div>
+            {studyTimerEnabled && (
+              <div className="bg-slate-50 dark:bg-white/5 border border-slate-200 dark:border-white/10 rounded-xl p-4 sm:p-5">
+                <div className="text-3xl font-black tabular-nums text-slate-900 dark:text-white sm:text-4xl">
+                  {formatElapsedTime(elapsedSeconds)}
+                </div>
+                <div className="text-xs font-bold text-slate-500 uppercase tracking-widest mt-1">Tempo final</div>
+              </div>
+            )}
           </div>
 
           {removedIds.size > 0 && (
@@ -202,19 +235,19 @@ export function WritingMode({ flashcards, onExit, onRemoveFromReview }: WritingM
             </div>
           )}
 
-          <div className="flex flex-col gap-3 pt-4">
+          <div className="flex flex-col gap-2 pt-2 sm:pt-3">
             {kept > 0 && (
               <Button
-                className="w-full h-14 bg-primary hover:bg-primary/90 text-white font-bold text-lg rounded-xl shadow-lg shadow-primary/20"
+                className="w-full h-11 bg-primary hover:bg-primary/90 text-white font-bold text-base rounded-xl shadow-lg shadow-primary/20 sm:h-12 sm:text-lg"
                 onClick={restart}
               >
-                <RotateCw className="size-5 mr-2" />
+                <RotateCw className="size-4 mr-2 sm:size-5" />
                 REPETIR REVISÃO
               </Button>
             )}
             <Button
               variant="ghost"
-              className="w-full h-12 text-slate-500 hover:text-slate-900 dark:hover:text-white font-bold uppercase tracking-widest"
+              className="w-full h-10 text-xs text-slate-500 hover:text-slate-900 dark:hover:text-white font-bold uppercase tracking-widest sm:h-11"
               onClick={onExit}
             >
               Sair para o início
@@ -265,6 +298,12 @@ export function WritingMode({ flashcards, onExit, onRemoveFromReview }: WritingM
         <span className="text-xs font-semibold text-muted-foreground dark:text-white/70 sm:text-sm">
           {doneCount}/{totalCards}
         </span>
+        {studyTimerEnabled && (
+          <span className="inline-flex items-center gap-1 text-xs font-semibold text-muted-foreground dark:text-white/70 sm:text-sm">
+            <Clock3 className="size-3.5" />
+            {formatElapsedTime(elapsedSeconds)}
+          </span>
+        )}
       </div>
 
       <div className="flex flex-1 items-center justify-center bg-slate-50 p-3 pb-[calc(env(safe-area-inset-bottom)+0.75rem)] dark:bg-slate-950/50 sm:p-6">
@@ -411,27 +450,36 @@ export function WritingMode({ flashcards, onExit, onRemoveFromReview }: WritingM
           </div>
 
           {(stage === "rate" || stage === "correct" || stage === "wrong") && (
-            <div className="mt-5 flex gap-3 sm:mt-8 sm:gap-4">
-                <Button
-                  size="lg"
-                  variant="outline"
-                  className="h-12 flex-1 border-destructive/20 text-base font-bold text-destructive hover:bg-destructive/10 sm:h-16 sm:text-lg"
-                  onClick={() => void handleRate(false)}
-                  disabled={stage !== "rate"}
-                >
-                  <XCircle className="size-6 mr-2" />
-                  Errei
-                </Button>
-                <Button
-                  size="lg"
-                  className="h-12 flex-1 bg-success text-base font-bold text-white hover:bg-success/90 sm:h-16 sm:text-lg"
-                  onClick={() => void handleRate(true)}
-                  disabled={stage !== "rate"}
-                >
-                  <CheckCircle2 className="size-6 mr-2" />
-                  Acertei
-                </Button>
-            </div>
+            <>
+              <div className="mt-4 flex gap-2 sm:mt-6 sm:gap-3">
+                  <Button
+                    size="lg"
+                    variant="outline"
+                    className="h-10 flex-1 border-destructive/20 text-sm font-bold text-destructive hover:bg-destructive/10 sm:h-12 sm:text-base"
+                    onClick={() => void handleRate(false)}
+                    disabled={stage !== "rate"}
+                  >
+                    <XCircle className="size-5 mr-1.5" />
+                    Errei
+                  </Button>
+                  <Button
+                    size="lg"
+                    className="h-10 flex-1 bg-success text-sm font-bold text-white hover:bg-success/90 sm:h-12 sm:text-base"
+                    onClick={() => void handleRate(true)}
+                    disabled={stage !== "rate"}
+                  >
+                    <CheckCircle2 className="size-5 mr-1.5" />
+                    Acertei
+                  </Button>
+              </div>
+              <Button
+                variant="ghost"
+                className="mt-2 h-9 w-full text-xs font-semibold text-muted-foreground hover:text-foreground"
+                onClick={onExit}
+              >
+                Voltar ao início
+              </Button>
+            </>
           )}
 
           {stage === "write" && (
