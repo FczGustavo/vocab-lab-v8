@@ -304,41 +304,53 @@ export function useFlashcardsDB() {
       const transaction = db.transaction(FLASHCARDS_STORE, "readwrite")
       const store = transaction.objectStore(FLASHCARDS_STORE)
 
-      const existingLocal = flashcards.find((c) => c.id === flashcard.id)
-      const normalizedUpdate: Flashcard =
-        existingLocal && flashcard.folderId === null && existingLocal.folderId !== null
-          ? { ...flashcard, folderId: existingLocal.folderId }
-          : flashcard
-
       return new Promise((resolve) => {
-        const index = store.index("word_pos")
-        const key = [normalizedUpdate.word, normalizedUpdate.partOfSpeech]
-        const checkRequest = index.get(key)
+        const getById = store.get(flashcard.id)
 
-        checkRequest.onsuccess = () => {
-          const existing = checkRequest.result as Flashcard | undefined
-          if (existing && existing.id !== normalizedUpdate.id) {
-            resolve(false)
-            return
+        getById.onsuccess = () => {
+          const existingById = getById.result as Flashcard | undefined
+          const normalizedWord = String(flashcard.word ?? "").trim().toLowerCase()
+
+          const merged: Flashcard = {
+            ...flashcard,
+            word: normalizedWord,
+            folderId:
+              flashcard.folderId === null && existingById?.folderId !== null && existingById?.folderId !== undefined
+                ? existingById.folderId
+                : flashcard.folderId,
           }
 
-          const request = store.put(normalizedUpdate)
+          const index = store.index("word_pos")
+          const key = [merged.word, merged.partOfSpeech]
+          const checkRequest = index.get(key)
 
-          request.onsuccess = () => {
-            setFlashcards((prev) => prev.map((c) => (c.id === normalizedUpdate.id ? normalizedUpdate : c)))
-            notifyFlashcardsUpdated()
-            resolve(true)
+          checkRequest.onsuccess = () => {
+            const existing = checkRequest.result as Flashcard | undefined
+            if (existing && existing.id !== merged.id) {
+              resolve(false)
+              return
+            }
+
+            const request = store.put(merged)
+
+            request.onsuccess = () => {
+              setFlashcards((prev) => prev.map((c) => (c.id === merged.id ? merged : c)))
+              notifyFlashcardsUpdated()
+              resolve(true)
+            }
+
+            request.onerror = () => resolve(false)
           }
 
-          request.onerror = () => resolve(false)
+          checkRequest.onerror = () => resolve(false)
         }
 
-        checkRequest.onerror = () => resolve(false)
+        getById.onerror = () => resolve(false)
       })
     } catch {
       return false
     }
-  }, [flashcards])
+  }, [])
 
   const moveFlashcardToFolder = useCallback(async (flashcardId: string, folderId: string | null): Promise<boolean> => {
     try {
