@@ -78,6 +78,7 @@ export function AddFlashcardForm({ onAdd, onUpdate, bare }: AddFlashcardFormProp
   const [saveFlash, setSaveFlash] = useState<"success" | "error" | null>(null)
 
   const triggerSaveFlash = (tone: "success" | "error") => {
+    if (!showManualOptionalFields) return
     setSaveFlash(tone)
     window.setTimeout(() => setSaveFlash(null), 900)
   }
@@ -137,14 +138,11 @@ export function AddFlashcardForm({ onAdd, onUpdate, bare }: AddFlashcardFormProp
 
       const success = await onAdd(flashcard, { closeAfterAdd: false })
       if (success) {
-        triggerSaveFlash("success")
         setWord("")
       } else {
-        triggerSaveFlash("error")
         setError("Esta palavra já existe nessa categoria no seu vocabulário.")
       }
     } catch (err) {
-      triggerSaveFlash("error")
       setError(err instanceof Error ? err.message : "Erro ao gerar flashcard")
     } finally {
       setIsLoading(false)
@@ -220,11 +218,6 @@ export function AddFlashcardForm({ onAdd, onUpdate, bare }: AddFlashcardFormProp
         title: "Lote concluído",
         description: `Adicionados: ${added} · Duplicados: ${skipped} · Falhas: ${failed}`,
       })
-      if (added > 0 && failed === 0) {
-        triggerSaveFlash("success")
-      } else if (added === 0 || failed > 0) {
-        triggerSaveFlash("error")
-      }
       setBatchText("")
     } finally {
       setIsLoading(false)

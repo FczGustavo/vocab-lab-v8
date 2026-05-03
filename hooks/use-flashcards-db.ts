@@ -304,22 +304,28 @@ export function useFlashcardsDB() {
       const transaction = db.transaction(FLASHCARDS_STORE, "readwrite")
       const store = transaction.objectStore(FLASHCARDS_STORE)
 
+      const existingLocal = flashcards.find((c) => c.id === flashcard.id)
+      const normalizedUpdate: Flashcard =
+        existingLocal && flashcard.folderId === null && existingLocal.folderId !== null
+          ? { ...flashcard, folderId: existingLocal.folderId }
+          : flashcard
+
       return new Promise((resolve) => {
         const index = store.index("word_pos")
-        const key = [flashcard.word, flashcard.partOfSpeech]
+        const key = [normalizedUpdate.word, normalizedUpdate.partOfSpeech]
         const checkRequest = index.get(key)
 
         checkRequest.onsuccess = () => {
           const existing = checkRequest.result as Flashcard | undefined
-          if (existing && existing.id !== flashcard.id) {
+          if (existing && existing.id !== normalizedUpdate.id) {
             resolve(false)
             return
           }
 
-          const request = store.put(flashcard)
+          const request = store.put(normalizedUpdate)
 
           request.onsuccess = () => {
-            setFlashcards((prev) => prev.map((c) => (c.id === flashcard.id ? flashcard : c)))
+            setFlashcards((prev) => prev.map((c) => (c.id === normalizedUpdate.id ? normalizedUpdate : c)))
             notifyFlashcardsUpdated()
             resolve(true)
           }
@@ -332,7 +338,7 @@ export function useFlashcardsDB() {
     } catch {
       return false
     }
-  }, [])
+  }, [flashcards])
 
   const moveFlashcardToFolder = useCallback(async (flashcardId: string, folderId: string | null): Promise<boolean> => {
     try {
