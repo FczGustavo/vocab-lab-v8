@@ -4,7 +4,7 @@ import { useState, useEffect, useCallback } from "react"
 import type { Flashcard, Folder } from "@/lib/types"
 
 const DB_NAME = "vocab-lab-db"
-const DB_VERSION = 4
+const DB_VERSION = 5
 const FLASHCARDS_STORE = "flashcards"
 const FOLDERS_STORE = "folders"
 const FLASHCARDS_UPDATED_EVENT = "vocablab-flashcards-updated"
@@ -231,8 +231,11 @@ export function useFlashcardsDB() {
         const transaction = db.transaction(FLASHCARDS_STORE, "readwrite")
         const store = transaction.objectStore(FLASHCARDS_STORE)
 
+        const normalizedWord = String(flashcard.word ?? "").trim().toLowerCase()
+
         const flashcardWithFolder = {
           ...flashcard,
+          word: normalizedWord,
           folderId: selectedFolderId,
         }
 

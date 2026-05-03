@@ -61,6 +61,8 @@ export function SettingsDialog() {
     setEfommMode,
     includeMultipleTranslations,
     setIncludeMultipleTranslations,
+    showManualOptionalFields,
+    setShowManualOptionalFields,
   } = useAiPreferences()
   const { syncCode, setSyncCode, regenerate, isValid: isSyncCodeValid } = useSyncCode()
   const { allFlashcards, folders, importAllData } = useFlashcardsDB()
@@ -352,6 +354,21 @@ export function SettingsDialog() {
                   </div>
                 </div>
 
+                <div className={cn("space-y-3 pt-4 border-t", activeTab !== "general" && "hidden")}>
+                  <div className="flex items-center justify-between">
+                    <div className="space-y-0.5">
+                      <h4 className="text-sm font-medium flex items-center gap-2">
+                        <Sparkles className="size-4 text-primary" />
+                        Manual: campos opcionais
+                      </h4>
+                      <p className="text-[10px] text-muted-foreground">
+                        Desligado: mostra apenas palavra, tradução e tag. Ligado: mostra exemplo, tradução do exemplo e contexto.
+                      </p>
+                    </div>
+                    <Switch checked={showManualOptionalFields} onCheckedChange={setShowManualOptionalFields} />
+                  </div>
+                </div>
+
                 <div className={cn("space-y-4 pt-4 border-t", activeTab !== "content" && "hidden")}>
                   <h4 className="text-sm font-medium flex items-center gap-2">
                     <Sparkles className="size-4 text-primary" />
@@ -464,7 +481,9 @@ export function SettingsDialog() {
                       </p>
                     </div>
                     <Switch checked={efommMode} onCheckedChange={setEfommMode} />
-                  </div>                </div>
+                  </div>
+
+                </div>
 
                 <div className={cn("space-y-3 pt-4 border-t", activeTab !== "general" && "hidden")}>
                   <h4 className="text-sm font-medium flex items-center gap-2">

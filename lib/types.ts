@@ -42,6 +42,7 @@ export interface Flashcard {
     isFalseCognate: boolean
     warning: string // Ex: "Não significa 'pretender', significa 'fingir'"
   }
+  aiEnriching?: boolean
   folderId: string | null
   isReviewFolder?: boolean
   createdAt: number

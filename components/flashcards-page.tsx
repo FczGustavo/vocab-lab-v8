@@ -51,6 +51,7 @@ import { toast } from "@/hooks/use-toast"
 import type { Flashcard, FlashcardAIResponse, PartOfSpeech } from "@/lib/types"
 
 const AI_SETTINGS_HINT_SEEN_KEY = "vocablab_ai_settings_hint_seen"
+const MANUAL_MODE_HINT_SEEN_KEY = "vocablab_manual_mode_hint_seen"
 
 const partOfSpeechLabels: Record<PartOfSpeech, string> = {
   verb: "Verbo",
@@ -114,6 +115,7 @@ export function FlashcardsPage() {
   const [isAddOpen, setIsAddOpen] = useState(false)
   const [isStatsOpen, setIsStatsOpen] = useState(false)
   const [showAiSettingsHint, setShowAiSettingsHint] = useState(false)
+  const [showManualModeHint, setShowManualModeHint] = useState(false)
   const [searchQuery, setSearchQuery] = useState("")
   const [selectedTag, setSelectedTag] = useState<PartOfSpeech | "all">("all")
 
@@ -122,11 +124,21 @@ export function FlashcardsPage() {
     if (!seen) {
       setShowAiSettingsHint(true)
     }
+
+    const manualModeSeen = localStorage.getItem(MANUAL_MODE_HINT_SEEN_KEY)
+    if (!manualModeSeen) {
+      setShowManualModeHint(true)
+    }
   }, [])
 
   const dismissAiSettingsHint = () => {
     localStorage.setItem(AI_SETTINGS_HINT_SEEN_KEY, "true")
     setShowAiSettingsHint(false)
+  }
+
+  const dismissManualModeHint = () => {
+    localStorage.setItem(MANUAL_MODE_HINT_SEEN_KEY, "true")
+    setShowManualModeHint(false)
   }
 
   useEffect(() => {
@@ -260,9 +272,12 @@ export function FlashcardsPage() {
     }
   }
 
-  const handleAddWord = async (flashcard: Flashcard): Promise<boolean> => {
+  const handleAddWord = async (
+    flashcard: Flashcard,
+    meta?: { closeAfterAdd?: boolean }
+  ): Promise<boolean> => {
     const ok = await addFlashcard(flashcard)
-    if (ok) setIsAddOpen(false)
+    if (ok && (meta?.closeAfterAdd ?? true)) setIsAddOpen(false)
     return ok
   }
 
@@ -326,6 +341,25 @@ export function FlashcardsPage() {
         </DialogContent>
       </Dialog>
 
+      <Dialog
+        open={showManualModeHint && !showAiSettingsHint}
+        onOpenChange={(open) => !open && dismissManualModeHint()}
+      >
+        <DialogContent className="max-w-[92vw] sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle>Novo modo Manual</DialogTitle>
+            <DialogDescription>
+              Agora você pode criar cards com fluxo rápido no modo Manual. Em Configurações → Geral,
+              você controla se os campos opcionais (exemplo/contexto) aparecem ou ficam ocultos.
+              Mesmo ocultos, a IA pode completar os campos em segundo plano.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="flex justify-end">
+            <Button onClick={dismissManualModeHint}>Entendi</Button>
+          </div>
+        </DialogContent>
+      </Dialog>
+
       {/* ── Hero Section ─────────────────────────────────────── */}
       <div className="mb-8 flex flex-col items-center gap-4 pt-2 sm:mb-10 sm:gap-5 sm:pt-4">
 
@@ -347,7 +381,7 @@ export function FlashcardsPage() {
             </button>
           ) : (
             <div className="animate-slide-down rounded-2xl border border-border/40 bg-card px-4 py-3 shadow-sm">
-              <AddFlashcardForm onAdd={handleAddWord} bare />
+              <AddFlashcardForm onAdd={handleAddWord} onUpdate={updateFlashcard} bare />
               <button
                 type="button"
                 onClick={() => setIsAddOpen(false)}

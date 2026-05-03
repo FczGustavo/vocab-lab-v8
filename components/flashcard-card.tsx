@@ -130,6 +130,7 @@ export function FlashcardCard({ flashcard, onDelete, onCreateFromAlternative, on
   }
 
   const partOfSpeech = flashcard.partOfSpeech || "noun"
+  const isAiEnriching = Boolean(flashcard.aiEnriching)
   const usageNoteText = normalizeUsageNotePlain(flashcard.usageNote || "")
   const hasContext = includeUsageNote && usageNoteText.length > 0
   const hasExample = Boolean(flashcard.example?.trim())
@@ -210,6 +211,11 @@ export function FlashcardCard({ flashcard, onDelete, onCreateFromAlternative, on
                 {flashcard.verbType && (
                   <Badge variant="outline" className="ghost-tag h-5 bg-primary/10 text-[9px] uppercase tracking-wider text-primary border-0 dark:bg-primary/15">
                     {flashcard.verbType}
+                  </Badge>
+                )}
+                {isAiEnriching && (
+                  <Badge variant="outline" className="ghost-tag h-5 border-0 bg-primary/10 text-[9px] text-primary">
+                    <Loader2 className="mr-1 size-3 animate-spin" /> IA completando
                   </Badge>
                 )}
               </div>
@@ -460,6 +466,11 @@ export function FlashcardCard({ flashcard, onDelete, onCreateFromAlternative, on
                   {flashcard.verbType === "regular" ? "Reg" : "Irr"}
                 </Badge>
               )}
+              {isAiEnriching && (
+                <Badge variant="outline" className="ghost-tag h-4 border-0 bg-primary/10 px-1.5 text-[8px] leading-none text-primary">
+                  <Loader2 className="mr-1 size-2.5 animate-spin" /> IA
+                </Badge>
+              )}
             </div>
           </div>
           {hasExample && (
@@ -515,6 +526,11 @@ export function FlashcardCard({ flashcard, onDelete, onCreateFromAlternative, on
                   {flashcard.verbType}
                 </Badge>
               )}
+              {isAiEnriching && (
+                <Badge variant="outline" className="ghost-tag border-0 bg-primary/10 text-[10px] text-primary">
+                  <Loader2 className="mr-1 size-3 animate-spin" /> IA completando
+                </Badge>
+              )}
             </div>
             <div className="flex gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
               <Button
@@ -563,6 +579,11 @@ export function FlashcardCard({ flashcard, onDelete, onCreateFromAlternative, on
               {flashcard.verbType && (
                 <Badge variant="outline" className="ghost-tag bg-primary/10 text-[10px] uppercase tracking-wider text-primary border-0">
                   {flashcard.verbType}
+                </Badge>
+              )}
+              {isAiEnriching && (
+                <Badge variant="outline" className="ghost-tag border-0 bg-primary/10 text-[10px] text-primary">
+                  <Loader2 className="mr-1 size-3 animate-spin" /> IA completando
                 </Badge>
               )}
             </div>
