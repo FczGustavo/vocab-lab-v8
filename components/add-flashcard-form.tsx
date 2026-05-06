@@ -234,7 +234,9 @@ export function AddFlashcardForm({ onAdd, onUpdate, bare }: AddFlashcardFormProp
     const normalizedExample = manualExample.trim()
     const normalizedExampleTranslation = manualExampleTranslation.trim()
     const normalizedUsageNote = manualUsageNote.trim()
-    const needsBackgroundEnrichment = !normalizedTranslation || !normalizedExample || !normalizedExampleTranslation
+    const needsCoreEnrichment = !normalizedTranslation || !normalizedExample || !normalizedExampleTranslation
+    const needsConjugationEnrichment = includeConjugations && manualPartOfSpeech === "verb"
+    const needsBackgroundEnrichment = needsCoreEnrichment || needsConjugationEnrichment
 
     if (!normalizedWord) {
       triggerSaveFlash("error")
@@ -413,6 +415,36 @@ export function AddFlashcardForm({ onAdd, onUpdate, bare }: AddFlashcardFormProp
               }))
               aiConjugations = data.conjugations ?? undefined
               aiVerbType = data.verbType ?? undefined
+            }
+
+            if (needsConjugationEnrichment) {
+              const conjugationRes = await fetch("/api/ai/flashcard", {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({
+                  word: normalizedWord,
+                  model,
+                  options: {
+                    synonymsLevel: 0,
+                    includeConjugations: true,
+                    includeAlternativeForms: false,
+                    includeUsageNote: false,
+                    contextMode: contextDetailMode,
+                    efommMode,
+                    includeMultipleTranslations: false,
+                    targetPartOfSpeech: manualPartOfSpeech,
+                  },
+                }),
+              })
+
+              if (!conjugationRes.ok) {
+                const json = await conjugationRes.json().catch(() => ({}))
+                throw new Error(json?.error || "Falha ao gerar conjugação do verbo")
+              }
+
+              const conjugationData = (await conjugationRes.json()) as FlashcardAIResponse
+              aiConjugations = conjugationData.conjugations ?? aiConjugations
+              aiVerbType = conjugationData.verbType ?? aiVerbType
             }
 
             const enriched: Flashcard = {
