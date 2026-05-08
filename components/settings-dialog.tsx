@@ -239,6 +239,10 @@ export function SettingsDialog() {
               <Sparkles className="size-4 text-primary" />
               Conteúdo
             </Button>
+
+            <div className="mt-3 rounded-md border border-border/60 bg-background/70 p-2 text-[10px] leading-relaxed text-muted-foreground">
+              Dica rápida: no verso do card, clique na tradução para editar. No bloco de contexto, clique em "Contexto" para editar o texto.
+            </div>
           </div>
 
           <div className="flex-1 p-5 max-h-[70vh] overflow-y-auto">
@@ -439,7 +443,7 @@ export function SettingsDialog() {
                     <div className="space-y-0.5">
                       <Label className="text-sm">Contexto</Label>
                       <p className="text-[10px] text-muted-foreground">
-                        Mostra uma explicação curta e organizada em blocos para o uso da palavra.
+                        Mostra uma explicação curta e organizada em blocos para o uso da palavra. No card, clique em "Contexto" para editar.
                       </p>
                     </div>
                     <Switch checked={includeUsageNote} onCheckedChange={setIncludeUsageNote} />
@@ -467,7 +471,7 @@ export function SettingsDialog() {
                     <div className="space-y-0.5">
                       <Label className="text-sm">Duas traduções</Label>
                       <p className="text-[10px] text-muted-foreground">
-                        Se ativado, a IA pode retornar duas traduções separadas por “/”. Se desativado, retorna somente a melhor tradução.
+                        Se ativado, a IA pode retornar duas traduções separadas por “/”. Se desativado, retorna somente a melhor tradução. No card, clique na tradução para editar manualmente.
                       </p>
                     </div>
                     <Switch checked={includeMultipleTranslations} onCheckedChange={setIncludeMultipleTranslations} />

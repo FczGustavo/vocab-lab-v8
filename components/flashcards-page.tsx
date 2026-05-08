@@ -316,6 +316,7 @@ export function FlashcardsPage() {
         flashcards={effectiveStudyCards}
         folderName={isReviewStudy ? "Revisão" : studyFolderName}
         onMarkForReview={isReviewStudy ? undefined : addToReviewFolder}
+        onMarkAsLearned={removeFromReviewFolder}
         onExit={() => {
           setIsStudying(false)
           setStudyCards(null)

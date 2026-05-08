@@ -1,6 +1,6 @@
 "use client"
 
-import { useEffect, useState } from "react"
+import { useEffect, useRef, useState, type MouseEvent } from "react"
 import { Trash2, Volume2, Loader2, Languages, Rotate3D, ChevronDown, ChevronUp } from "lucide-react"
 import { cn } from "@/lib/utils"
 import { Button } from "@/components/ui/button"
@@ -19,6 +19,7 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog"
 import { Input } from "@/components/ui/input"
+import { Textarea } from "@/components/ui/textarea"
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible"
 
 interface FlashcardCardProps {
@@ -117,9 +118,12 @@ export function FlashcardCard({ flashcard, onDelete, onCreateFromAlternative, on
   const [showConjugations, setShowConjugations] = useState(false)
   const [showExampleTranslation, setShowExampleTranslation] = useState(false)
   const [editOpen, setEditOpen] = useState(false)
+  const [editField, setEditField] = useState<"translation" | "context">("translation")
   const [translationDraft, setTranslationDraft] = useState("")
   const [editBusy, setEditBusy] = useState(false)
   const [contextExpanded, setContextExpanded] = useState(false)
+  const suppressFlipUntilRef = useRef(0)
+  const consumeNextFlipRef = useRef(false)
   const { enabled: animationsEnabled } = useAnimations()
   const { synonymsLevel, includeConjugations, includeAlternativeForms, includeUsageNote } = useAiPreferences()
 
@@ -141,14 +145,56 @@ export function FlashcardCard({ flashcard, onDelete, onCreateFromAlternative, on
     : []
 
   useEffect(() => {
-    if (editOpen) {
-      setTranslationDraft(flashcard.translation || "")
+    if (!editOpen) return
+    setTranslationDraft(editField === "context" ? flashcard.usageNote || "" : flashcard.translation || "")
+  }, [editOpen, editField, flashcard.translation, flashcard.usageNote])
+
+  const blockFlipTemporarily = (ms = 300) => {
+    suppressFlipUntilRef.current = Date.now() + ms
+  }
+
+  const toggleFlipSafely = () => {
+    if (editOpen || editBusy) return
+    if (consumeNextFlipRef.current) {
+      consumeNextFlipRef.current = false
+      return
     }
-  }, [editOpen, flashcard.translation])
+    if (Date.now() < suppressFlipUntilRef.current) return
+    setIsFlipped((value) => !value)
+  }
+
+  const closeEditDialog = () => {
+    consumeNextFlipRef.current = true
+    blockFlipTemporarily()
+    setEditOpen(false)
+  }
+
+  const handleEditOpenChange = (open: boolean) => {
+    if (editBusy) return
+    if (!open) {
+      closeEditDialog()
+      return
+    }
+    setEditOpen(true)
+  }
+
+  const openTranslationEditor = (event: MouseEvent) => {
+    event.stopPropagation()
+    blockFlipTemporarily()
+    setEditField("translation")
+    setEditOpen(true)
+  }
+
+  const openContextEditor = (event: MouseEvent) => {
+    event.stopPropagation()
+    blockFlipTemporarily()
+    setEditField("context")
+    setEditOpen(true)
+  }
 
   const submitTranslationEdit = async () => {
-    const nextTranslation = translationDraft.trim()
-    if (!nextTranslation) return
+    const nextValue = translationDraft.trim()
+    if (!nextValue) return
     if (!onUpdateFlashcard) {
       toast({
         title: "Não foi possível salvar",
@@ -160,14 +206,15 @@ export function FlashcardCard({ flashcard, onDelete, onCreateFromAlternative, on
 
     setEditBusy(true)
     const t = toast({
-      title: "Salvando tradução…",
-      description: `${flashcard.word} → ${nextTranslation}`,
+      title: editField === "context" ? "Salvando contexto…" : "Salvando tradução…",
+      description: `${flashcard.word} → ${nextValue}`,
     })
 
     try {
       const updated: Flashcard = {
         ...flashcard,
-        translation: nextTranslation,
+        translation: editField === "translation" ? nextValue : flashcard.translation,
+        usageNote: editField === "context" ? nextValue : flashcard.usageNote,
       }
 
       const ok = await onUpdateFlashcard(updated)
@@ -176,9 +223,9 @@ export function FlashcardCard({ flashcard, onDelete, onCreateFromAlternative, on
       t.update({
         id: t.id,
         title: "Card atualizado",
-        description: "Tradução atualizada com sucesso.",
+        description: editField === "context" ? "Contexto atualizado com sucesso." : "Tradução atualizada com sucesso.",
       })
-      setEditOpen(false)
+      closeEditDialog()
     } catch (err) {
       t.update({
         id: t.id,
@@ -197,7 +244,7 @@ export function FlashcardCard({ flashcard, onDelete, onCreateFromAlternative, on
       <>
         <Card
           className="surface-card surface-card-elevated interactive-lift relative flex cursor-pointer flex-col justify-between gap-4 p-4"
-          onClick={() => setIsFlipped((value) => !value)}
+          onClick={toggleFlipSafely}
         >
           <div className="flex items-start justify-between gap-4">
             <div className="min-w-0 flex-1 space-y-2">
@@ -247,7 +294,7 @@ export function FlashcardCard({ flashcard, onDelete, onCreateFromAlternative, on
                 className="size-8"
                 onClick={(e) => {
                   e.stopPropagation()
-                  setIsFlipped((value) => !value)
+                  toggleFlipSafely()
                 }}
               >
                 <Rotate3D className={cn("size-4 transition-transform", isFlipped && "rotate-180")} />
@@ -275,19 +322,17 @@ export function FlashcardCard({ flashcard, onDelete, onCreateFromAlternative, on
             )}>
               <div className="space-y-3 pb-12">
                 <div className="space-y-1.5">
-                  <p
-                    className="min-w-0 cursor-pointer text-lg font-medium leading-snug text-foreground"
-                    onClick={(e) => {
-                      e.stopPropagation()
-                      setEditOpen(true)
-                    }}
+                  <button
+                    type="button"
+                    className="inline max-w-full cursor-pointer break-words bg-transparent p-0 text-left text-lg font-medium leading-snug text-foreground"
+                    onClick={openTranslationEditor}
                     title="Clique para editar tradução"
                   >
                     {flashcard.translation}
-                  </p>
+                  </button>
                 </div>
                 {hasExample && (
-                  <div>
+                  <div onClick={(e) => e.stopPropagation()}>
                     <p className="text-xs text-foreground italic">{flashcard.example}</p>
                     {flashcard.exampleTranslation && (
                       <div className="mt-1">
@@ -316,10 +361,14 @@ export function FlashcardCard({ flashcard, onDelete, onCreateFromAlternative, on
 
               <div className="space-y-3">
                 {hasContext && (
-                  <div className="group/context rounded-lg bg-muted/30 p-3">
+                  <div className="group/context rounded-lg bg-muted/30 p-3" onClick={(e) => e.stopPropagation()}>
                   <Collapsible open={contextExpanded} onOpenChange={setContextExpanded}>
                     <div className="flex items-center justify-between gap-2">
-                      <span className="text-[10px] font-bold text-muted-foreground uppercase tracking-widest">
+                      <span
+                        className="cursor-pointer text-[10px] font-bold text-muted-foreground uppercase tracking-widest"
+                        onClick={openContextEditor}
+                        title="Clique para editar contexto"
+                      >
                         Contexto
                       </span>
                       <CollapsibleTrigger asChild>
@@ -406,7 +455,7 @@ export function FlashcardCard({ flashcard, onDelete, onCreateFromAlternative, on
           )}
         </Card>
 
-        <Dialog open={editOpen} onOpenChange={(o) => !editBusy && setEditOpen(o)}>
+        <Dialog open={editOpen} onOpenChange={handleEditOpenChange}>
           <DialogContent className="max-w-[92vw] sm:max-w-md">
             <DialogHeader>
               <DialogTitle>Editar tradução</DialogTitle>
@@ -426,7 +475,7 @@ export function FlashcardCard({ flashcard, onDelete, onCreateFromAlternative, on
               />
             </div>
             <DialogFooter>
-              <Button variant="outline" onClick={() => setEditOpen(false)} disabled={editBusy}>
+              <Button variant="outline" onClick={closeEditDialog} disabled={editBusy}>
                 Cancelar
               </Button>
               <Button onClick={submitTranslationEdit} disabled={editBusy || !translationDraft.trim()}>
@@ -449,7 +498,7 @@ export function FlashcardCard({ flashcard, onDelete, onCreateFromAlternative, on
   // Compact Layout
   if (layout === "compact") {
     return (
-      <Card className="surface-card surface-card-elevated interactive-lift group relative h-28 min-h-24 cursor-pointer overflow-hidden" onClick={() => setIsFlipped(!isFlipped)}>
+      <Card className="surface-card surface-card-elevated interactive-lift group relative h-28 min-h-24 cursor-pointer overflow-hidden" onClick={toggleFlipSafely}>
         <div className={cn(
           "absolute inset-0 p-3 flex flex-col justify-between transition-all",
           animationsEnabled ? "duration-300" : "duration-0",
@@ -505,7 +554,7 @@ export function FlashcardCard({ flashcard, onDelete, onCreateFromAlternative, on
   return (
     <div
       className="group perspective-1000 h-[19rem] cursor-pointer sm:h-80"
-      onClick={() => setIsFlipped(!isFlipped)}
+      onClick={toggleFlipSafely}
     >
       <div
         className={cn(
@@ -591,19 +640,17 @@ export function FlashcardCard({ flashcard, onDelete, onCreateFromAlternative, on
 
           <div className="no-scrollbar space-y-2.5 flex-1 overflow-y-auto pr-1 [scrollbar-gutter:stable]">
             <div className="space-y-1.5">
-              <p
-                className="cursor-pointer text-xl font-medium leading-snug text-foreground"
-                onClick={(e) => {
-                  e.stopPropagation()
-                  setEditOpen(true)
-                }}
+              <button
+                type="button"
+                className="inline max-w-full cursor-pointer break-words bg-transparent p-0 text-left text-xl font-medium leading-snug text-foreground"
+                onClick={openTranslationEditor}
                 title="Clique para editar tradução"
               >
                 {flashcard.translation}
-              </p>
+              </button>
             </div>
             {hasExample && (
-              <div>
+              <div onClick={(e) => e.stopPropagation()}>
                 <p className="text-sm text-foreground italic mt-0.5">
                   {flashcard.example}
                 </p>
@@ -626,10 +673,14 @@ export function FlashcardCard({ flashcard, onDelete, onCreateFromAlternative, on
               </div>
             )}
             {hasContext && (
-              <div className="group/context rounded-xl bg-muted/30 p-3">
+              <div className="group/context rounded-xl bg-muted/30 p-3" onClick={(e) => e.stopPropagation()}>
                 <Collapsible open={contextExpanded} onOpenChange={setContextExpanded}>
                     <div className="flex items-center justify-between gap-2">
-                      <span className="text-[10px] font-bold text-muted-foreground uppercase tracking-widest">
+                      <span
+                        className="cursor-pointer text-[10px] font-bold text-muted-foreground uppercase tracking-widest"
+                        onClick={openContextEditor}
+                        title="Clique para editar contexto"
+                      >
                         Contexto
                       </span>
                       <CollapsibleTrigger asChild>
@@ -745,27 +796,39 @@ export function FlashcardCard({ flashcard, onDelete, onCreateFromAlternative, on
         </div>
       </div>
 
-      <Dialog open={editOpen} onOpenChange={(o) => !editBusy && setEditOpen(o)}>
-        <DialogContent className="max-w-[92vw] sm:max-w-md">
+      <Dialog open={editOpen} onOpenChange={handleEditOpenChange}>
+        <DialogContent className="max-w-[96vw] sm:max-w-xl">
           <DialogHeader>
-            <DialogTitle>Editar tradução</DialogTitle>
+            <DialogTitle>{editField === "context" ? "Editar contexto" : "Editar tradução"}</DialogTitle>
             <DialogDescription>
-              Ao salvar, a tradução é atualizada diretamente neste card.
+              {editField === "context"
+                ? "Ao salvar, o contexto é atualizado diretamente neste card."
+                : "Ao salvar, a tradução é atualizada diretamente neste card."}
             </DialogDescription>
           </DialogHeader>
           <div className="space-y-2">
             <p className="text-xs text-muted-foreground">
               {flashcard.word} ({flashcard.partOfSpeech})
             </p>
-            <Input
-              value={translationDraft}
-              onChange={(e) => setTranslationDraft(e.target.value)}
-              placeholder="Ex: a bebida"
-              disabled={editBusy}
-            />
+            {editField === "context" ? (
+              <Textarea
+                value={translationDraft}
+                onChange={(e) => setTranslationDraft(e.target.value)}
+                placeholder="Ex: uso formal em relatórios"
+                disabled={editBusy}
+                className="min-h-28"
+              />
+            ) : (
+              <Input
+                value={translationDraft}
+                onChange={(e) => setTranslationDraft(e.target.value)}
+                placeholder="Ex: a bebida"
+                disabled={editBusy}
+              />
+            )}
           </div>
           <DialogFooter>
-            <Button variant="outline" onClick={() => setEditOpen(false)} disabled={editBusy}>
+            <Button variant="outline" onClick={closeEditDialog} disabled={editBusy}>
               Cancelar
             </Button>
             <Button onClick={submitTranslationEdit} disabled={editBusy || !translationDraft.trim()}>
@@ -775,7 +838,7 @@ export function FlashcardCard({ flashcard, onDelete, onCreateFromAlternative, on
                   Salvando…
                 </>
               ) : (
-                "Salvar e reanalisar"
+                "Salvar"
               )}
             </Button>
           </DialogFooter>

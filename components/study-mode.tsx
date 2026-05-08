@@ -49,6 +49,7 @@ interface StudyModeProps {
   folderName: string
   onExit: () => void
   onMarkForReview?: (id: string) => Promise<boolean>
+  onMarkAsLearned?: (id: string) => Promise<boolean>
 }
 
 type StudyState = "studying" | "finished"
@@ -59,7 +60,7 @@ function formatElapsedTime(totalSeconds: number) {
   return `${String(minutes).padStart(2, "0")}:${String(seconds).padStart(2, "0")}`
 }
 
-export function StudyMode({ flashcards, folderName, onExit, onMarkForReview }: StudyModeProps) {
+export function StudyMode({ flashcards, folderName, onExit, onMarkForReview, onMarkAsLearned }: StudyModeProps) {
   const { saveStudySession } = useGrammarProgress()
   const { enabled: animationsEnabled } = useAnimations()
   const { enabled: studyTimerEnabled } = useStudyTimer()
@@ -159,6 +160,9 @@ export function StudyMode({ flashcards, folderName, onExit, onMarkForReview }: S
           if (!wrongCount[current.id]) {
             setCorrectFirstTryIds((prev) => new Set([...prev, current.id]))
           }
+          if (onMarkAsLearned) {
+            void onMarkAsLearned(current.id)
+          }
         } else {
           setWrongCount((prev) => ({
             ...prev,
@@ -175,7 +179,7 @@ export function StudyMode({ flashcards, folderName, onExit, onMarkForReview }: S
         setDirection(null)
       }, transitionMs)
     },
-    [animating, current, transitionMs, wrongCount, onMarkForReview]
+    [animating, current, transitionMs, wrongCount, onMarkForReview, onMarkAsLearned]
   )
 
   const restart = () => {
