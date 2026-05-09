@@ -362,12 +362,19 @@ export function GrammarPage() {
     setActiveListId(null)
     lastClickRef.current = {}
 
-    const userWords = allFlashcards.slice(0, 30).map((f) => f.word)
+    const allUserWords = Array.from(
+      new Set(
+        allFlashcards
+          .map((f) => f.word?.trim())
+          .filter((w): w is string => Boolean(w))
+      )
+    )
     const generated: GrammarQuestion[] = []
     const newlyGenerated: GrammarQuestion[] = []
 
     try {
       const answeredIds = await getAnsweredIds()
+      const maxFromCache = 0
 
       // 1. Try shared Supabase cache first
       let fromDB: GrammarQuestion[] = []
@@ -385,13 +392,30 @@ export function GrammarPage() {
         if (res.ok) {
           const json = await res.json()
           const all: GrammarQuestion[] = json.questions ?? []
-          // Shuffle so different users get variety
-          fromDB = all.sort(() => Math.random() - 0.5).slice(0, questionCount)
+          // Prefer high-quality cached items and force mostly fresh AI generation.
+          const qualityFiltered = all.filter((q) => {
+            const stem = (q.questionText ?? "").toLowerCase()
+            const ctx = (q.contextPassage ?? "").toLowerCase()
+            const hasWeakStem =
+              stem.includes("standard order") ||
+              stem.includes("order of adjectives") ||
+              stem.includes("adverb placement") ||
+              stem.includes("according to grammar rules") ||
+              stem.includes("following the standard")
+            const hasWeakContext =
+              ctx.includes("order of adjectives") ||
+              ctx.includes("adverb placement") ||
+              ctx.includes("opinion >") ||
+              ctx.includes("size > age")
+            return !hasWeakStem && !hasWeakContext
+          })
+          // Shuffle so different users get variety.
+          fromDB = qualityFiltered.sort(() => Math.random() - 0.5).slice(0, maxFromCache)
         }
       } catch {
         // Supabase unavailable – fall back to local IndexedDB
         const cached = await getQuestionsForTopics(selectedTopics, answeredIds)
-        fromDB = cached.slice(0, questionCount)
+        fromDB = cached.slice(0, maxFromCache)
       }
 
       // Use DB questions
@@ -414,21 +438,24 @@ export function GrammarPage() {
           subPool.push({ topicId, topicLabel: topic.label, subtopic: sub })
         }
       }
-      // Always blend exactly 2 subtopics per question (or 1 if pool has only 1)
+      // Blend 2-3 subtopics for broader variation (or 1 if pool has only 1)
+      const randomInt = (min: number, max: number) => Math.floor(Math.random() * (max - min + 1)) + min
       const blendSize = subPool.length >= 2 ? 2 : 1
 
       for (let i = 0; i < needMore; i++) {
         const qNum = fromDB.length + i + 1
         setLoadingStatus(`Criando questao ${qNum} de ${questionCount}...`)
 
-        // Pick `blendSize` consecutive distinct subtopics from the pool (cycling)
-        const startIdx = (fromDB.length + i) % subPool.length
-        const blend = Array.from({ length: blendSize }, (_, j) => subPool[(startIdx + j) % subPool.length])
-        // Deduplicate by subtopic name in case pool is small and we wrapped onto the same item
+        const dynamicBlendSize = subPool.length >= 3 ? randomInt(2, 3) : blendSize
+        // Pick random distinct subtopics from the pool (less repetitive than cycling).
+        const shuffledPool = [...subPool].sort(() => Math.random() - 0.5)
+        const blend = shuffledPool.slice(0, dynamicBlendSize)
+        // Deduplicate by topic+subtopic key
         const seen = new Set<string>()
         const uniqueBlend = blend.filter((b) => {
-          if (seen.has(b.subtopic)) return false
-          seen.add(b.subtopic)
+          const key = `${b.topicId}:${b.subtopic}`
+          if (seen.has(key)) return false
+          seen.add(key)
           return true
         })
 
@@ -436,12 +463,30 @@ export function GrammarPage() {
         // Use the primary entry's topic label (most representative)
         const topicLabel = primaryEntry.topicLabel
         const subtopics = uniqueBlend.map((b) => b.subtopic)
-        const qType: "correct" | "incorrect" = (fromDB.length + i) % 2 === 0 ? "correct" : "incorrect"
+        const qType: "correct" | "incorrect" = Math.random() < 0.5 ? "correct" : "incorrect"
+
+        // Use learner words sparingly to avoid forcing unnatural repeated contexts.
+        const sampledUserWords =
+          allUserWords.length > 0 && Math.random() < 0.35
+            ? [...allUserWords].sort(() => Math.random() - 0.5).slice(0, 3)
+            : undefined
+
+        // Tell backend what was just generated so it can avoid repeating context/stems.
+        const recentContexts = generated
+          .slice(-5)
+          .map((q) => [q.contextPassage, q.questionText].filter(Boolean).join(" ").trim())
+          .filter((value) => value.length > 0)
 
         const aiRes = await fetch("/api/ai/grammar-question", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ topicLabel, subtopics, questionType: qType, userWords }),
+          body: JSON.stringify({
+            topicLabel,
+            subtopics,
+            questionType: qType,
+            userWords: sampledUserWords,
+            recentContexts,
+          }),
         })
         if (!aiRes.ok) {
           const json = await aiRes.json().catch(() => ({}))

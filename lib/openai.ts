@@ -2361,7 +2361,7 @@ function normalizeGrammarQuestionText(value: unknown): string {
 
 function isLikelyGrammarRuleDump(text: string): boolean {
   const normalized = normalizeForLooseMatch(text)
-  return /(regra|sequencia padrao|sequencia|ordem dos adjetivos|estrutura padrao|gramatica|analise as frases|opinion\s*>\s*size|size\s*>\s*age|age\s*>\s*shape|shape\s*>\s*color|color\s*>\s*origin|origin\s*>\s*material|material\s*>\s*purpose)/i.test(
+  return /(regra|sequencia padrao|sequencia|ordem dos adjetivos|adverb placement|estrutura padrao|gramatica|analise as frases|opinion\s*>\s*size|size\s*>\s*age|age\s*>\s*shape|shape\s*>\s*color|color\s*>\s*origin|origin\s*>\s*material|material\s*>\s*purpose)/i.test(
     normalized
   )
 }
@@ -2393,17 +2393,18 @@ function normalizeGrammarContextPassage(value: unknown): string | null {
   }
 
   const hasScenarioSignal =
-    /(imagine|situa[cç][aã]o|cen[aá]rio|durante|enquanto|em uma|numa|no\s+escritorio|na\s+escola|na\s+reuni[aã]o|conversa|email|mensagem|atendimento|loja|trabalho|viagem|aula)/i.test(
+    /(imagine|situa[cç][aã]o|cen[aá]rio|durante|enquanto|em uma|numa|briefing|memo|report|radio|watch|patrol|mission|drill|inspection|handover|email|mensagem|reuni[aã]o)/i.test(
       normalized
     )
 
   const hasConcreteAnchor =
-    /(cliente|fornecedor|entrevista|prazo|apresenta[cç][aã]o|relat[oó]rio|contrato|chamado|suporte|turma|professor|reuni[aã]o|projeto|embarque|hotel|aeroporto|consulta|paciente|pedido|or[cç]amento|dashboard|planilha)/i.test(
+    /(officer|crew|cadet|captain|bridge|deck|engine\s*room|vessel|cargo|harbor|port|runway|hangar|maintenance|logbook|dispatch|checkpoint|convoy|watch\s*officer|shift|report|briefing|command|training|sortie|patrol|inspection|radar|equipment|procedures?)/i.test(
       normalized
     )
 
-  if (!hasScenarioSignal && cleaned.length < 45) return null
-  if (!hasConcreteAnchor && cleaned.length < 90) return null
+  // Keep concise but meaningful operational contexts.
+  if (!hasScenarioSignal && !hasConcreteAnchor && cleaned.length < 80) return null
+  if (cleaned.length < 24) return null
 
   return cleaned
 }
@@ -2449,11 +2450,18 @@ export async function generateGrammarQuestion(
   subtopics: string[],
   questionType: "correct" | "incorrect",
   model: string = DEFAULT_AI_MODEL,
-  userWords?: string[]
+  userWords?: string[],
+  recentContexts?: string[]
 ): Promise<GrammarQuestionResponse> {
   const scope = [topicLabel, ...subtopics].filter(Boolean).join(" > ")
   const userWordsHint = Array.isArray(userWords) && userWords.length > 0
-    ? `Naturally incorporate some of the learner words when appropriate: ${userWords.slice(0, 20).join(", ")}.`
+    ? `Learner words are optional. Use at most ONE of these words only if it fits naturally; otherwise use none: ${userWords.slice(0, 8).join(", ")}. Never force vocabulary insertion.`
+    : "Do not force learner vocabulary."
+  const antiRepeatHint = Array.isArray(recentContexts) && recentContexts.length > 0
+    ? `Avoid repeating ideas, opening structures, or lexical patterns from recent generated items: ${recentContexts
+        .slice(-4)
+        .map((s) => `"${normalizeInlineWhitespace(s).slice(0, 180)}"`)
+        .join(" | ")}.`
     : ""
 
   const messages: OpenRouterMessage[] = [
@@ -2475,18 +2483,34 @@ Scope and difficulty:
 - Target style: military exam preparation tone inspired by EFOMM / EN / AFA.
 - Build original items only (do NOT copy or paraphrase real exam questions).
 
+Question design (organic + exam-like):
+- Randomly choose ONE archetype for each item and keep variety across calls:
+  1) complete-the-excerpt (1 blank)
+  2) complete-the-excerpt (2 short blanks represented in one missing segment)
+  3) sentence judgment (which option is correct/incorrect)
+  4) best rewrite of a formal message/report segment
+  5) choose the most appropriate sentence to continue a short operational context
+  6) error spotting in a realistic memo/radio-log style line
+- Keep the wording similar to exam commands (for example: "Mark the correct option to complete the excerpt below.", "Which sentence is grammatically correct?", "Choose the incorrect alternative.").
+- Do not mention the archetype name in the output.
+
 Output quality rules:
 - Use natural American English sentences.
 - "questionText" must contain only the task instruction. Do NOT explain grammar rules.
 - "contextPassage" is OPTIONAL. Default to null.
 - Provide "contextPassage" only when it materially helps the learner disambiguate answer choices.
 - If provided, it must be a concise, concrete mini-scenario (practical context), not a rule lecture.
+- When provided, target 35-90 words in 2-4 short sentences.
+- If "contextPassage" is present, every option must depend on that context (no decorative support text).
+- Vary sentence openings and wording; avoid repeated templates across items.
 - Avoid generic/repeated story templates.
 - When present, prefer high-value contexts common in military-prep exams: maritime operations, technical routines, aviation/academy logistics, formal instructions, reports, and mission-like communication.
-- NEVER include teaching-rule text such as "order of adjectives", "rule", "standard sequence", "analyze the sentences", or chains like "Opinion > Size > ...".
+- NEVER include teaching-rule text such as "order of adjectives", "adverb placement", "rule", "standard sequence", "analyze the sentences", or chains like "Opinion > Size > ...".
+- Avoid meta-pedagogical phrasing (e.g., "according to grammar rules", "following the standard order").
 - Provide short explanations in Brazilian Portuguese for each option.
 - Avoid harmful/offensive content.
 ${userWordsHint}
+${antiRepeatHint}
 
 Return valid JSON with exactly this shape:
 {
@@ -2539,10 +2563,13 @@ Must guarantee:
 - short explanations in Brazilian Portuguese
 - natural, unambiguous wording
 - keep an original military-exam-prep tone inspired by EFOMM / EN / AFA (without copying real items)
+- enforce an exam-like command style and realistic item construction (not textbook-style rule prompts)
 - "questionText" contains only the task instruction (no rule explanation)
 - "contextPassage" is optional and should be null unless it clearly improves disambiguation
 - when present, "contextPassage" must be concrete and non-generic
-- remove any rule-teaching text in both question and support text (e.g., standard sequences, adjective-order formulas, "analyze the sentences")
+- when present, "contextPassage" must be required to solve the item (not decorative)
+- remove any rule-teaching text in both question and support text (e.g., standard sequences, adjective-order formulas, adverb-placement lectures, "analyze the sentences")
+- keep variety of item archetypes over time (excerpt completion, sentence judgment, rewrite, continuation, memo/log error spotting)
 
 Return only:
 {
